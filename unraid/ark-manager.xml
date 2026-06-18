@@ -1,0 +1,48 @@
+<?xml version="1.0"?>
+<!-- Unraid template for the ARK Server Manager.
+     Companion container required: a Docker socket-proxy (tecnativa/docker-socket-proxy)
+     reachable at tcp://socket-proxy:2375 on the 'ark-net' network. The manager
+     never mounts the raw Docker socket itself.
+
+     IMPORTANT: use a path on the cache disk itself (/mnt/cache/appdata/...), NOT
+     the /mnt/user FUSE mount — the manager reflink-clones the ~13 GB game files
+     between servers, which only works on a single real filesystem (btrfs/XFS). -->
+<Container version="2">
+  <Name>ARK-Server-Manager</Name>
+  <Repository>ark-manager:local</Repository>
+  <Registry/>
+  <Network>ark-net</Network>
+  <Privileged>false</Privileged>
+  <Support/>
+  <Overview>
+    Web control panel for ARK: Survival Ascended (POK) and Survival Evolved
+    (hermsi) dedicated servers. Manages every setting, mods, clusters, live RCON,
+    and scheduled tasks, and spawns one container per game server. Requires a
+    companion docker-socket-proxy on the 'ark-net' network.
+  </Overview>
+  <Category>GameServers: Tools:</Category>
+  <WebUI>http://[IP]:[PORT:3000]/</WebUI>
+  <Icon>https://cdn.cloudflare.steamstatic.com/steam/apps/2399830/header.jpg</Icon>
+
+  <Config Name="Web UI" Target="3000" Default="3000" Mode="tcp" Type="Port" Display="always" Required="true">3000</Config>
+  <Config Name="API" Target="8787" Default="8787" Mode="tcp" Type="Port" Display="advanced" Required="false">8787</Config>
+
+  <Config Name="App data" Target="/data" Default="/mnt/cache/appdata/ark-manager" Mode="rw" Type="Path" Display="always" Required="true"
+    Description="Use /mnt/cache (the disk), not /mnt/user (FUSE), so reflink game-file caching works.">/mnt/cache/appdata/ark-manager</Config>
+
+  <Config Name="HOST_DATA_DIR" Target="HOST_DATA_DIR" Default="/mnt/cache/appdata/ark-manager" Type="Variable" Display="always" Required="true"
+    Description="Host path of the app data dir — the daemon resolves it for the game-server bind mounts. Must match the App data path above.">/mnt/cache/appdata/ark-manager</Config>
+  <Config Name="DOCKER_HOST" Target="DOCKER_HOST" Default="tcp://socket-proxy:2375" Type="Variable" Display="advanced" Required="true">tcp://socket-proxy:2375</Config>
+  <Config Name="PUBLIC_BASE_URL" Target="PUBLIC_BASE_URL" Default="" Type="Variable" Display="always" Required="false"
+    Description="How you reach the manager, e.g. http://192.168.1.10:3000 — used for links and each game container's Unraid WebUI button.">
+  </Config>
+  <Config Name="SECRETS_KEY" Target="SECRETS_KEY" Default="" Type="Variable" Display="always" Required="true" Mask="true"
+    Description="64 hex chars (32 bytes). Generate: openssl rand -hex 32">
+  </Config>
+  <Config Name="JWT_SECRET" Target="JWT_SECRET" Default="" Type="Variable" Display="always" Required="true" Mask="true"
+    Description="Random secret for session tokens. Generate: openssl rand -hex 24">
+  </Config>
+  <Config Name="PUID" Target="PUID" Default="99" Type="Variable" Display="advanced" Required="false">99</Config>
+  <Config Name="PGID" Target="PGID" Default="100" Type="Variable" Display="advanced" Required="false">100</Config>
+  <Config Name="TZ" Target="TZ" Default="UTC" Type="Variable" Display="advanced" Required="false">UTC</Config>
+</Container>

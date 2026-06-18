@@ -1,0 +1,57 @@
+# Reference deployment: the manager + a least-privilege Docker socket-proxy.
+# The manager controls Docker ONLY through the proxy (never the raw socket).
+#
+# On Unraid, set HOST_DATA_DIR to the real appdata path so bind mounts for the
+# spawned game containers resolve correctly on the host, e.g.
+#   HOST_DATA_DIR=/mnt/user/appdata/ark-manager
+name: ark-manager
+
+services:
+  # Least-privilege Docker API gateway (PLANNING.md → Security posture).
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy:latest
+    container_name: ark-socket-proxy
+    environment:
+      CONTAINERS: 1 # create/start/stop/remove/logs/attach/wait game containers
+      IMAGES: 1 # pull base/game images
+      NETWORKS: 1 # attach containers to ark-net
+      POST: 1 # enable write operations within the allowed sections
+      PING: 1
+      INFO: 1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [ark-net]
+    restart: unless-stopped
+
+  manager:
+    image: arkmanager/manager:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ark-manager
+    depends_on: [socket-proxy]
+    environment:
+      NODE_ENV: production
+      API_PORT: 8787
+      WEB_PORT: 3000
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
+      DATA_DIR: /data
+      DATABASE_URL: file:/data/db.sqlite
+      HOST_DATA_DIR: ${HOST_DATA_DIR:-/mnt/user/appdata/ark-manager}
+      DOCKER_HOST: tcp://socket-proxy:2375
+      SECRETS_KEY: ${SECRETS_KEY:?set a 64-hex-char SECRETS_KEY}
+      JWT_SECRET: ${JWT_SECRET:?set a JWT_SECRET}
+      PUID: ${PUID:-99}
+      PGID: ${PGID:-100}
+      TZ: ${TZ:-UTC}
+    volumes:
+      - ${HOST_DATA_DIR:-./data}:/data
+    ports:
+      - "3000:3000" # web UI
+      - "8787:8787" # API (optional to expose; web can proxy)
+    networks: [ark-net]
+    restart: unless-stopped
+
+networks:
+  ark-net:
+    name: ark-net

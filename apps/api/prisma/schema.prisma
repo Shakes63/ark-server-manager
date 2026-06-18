@@ -1,0 +1,170 @@
+// ARK Server Manager — data model (PLANNING.md → Data model).
+// SQLite has no native enums, so enum-typed columns are stored as TEXT using the
+// string values from @ark/shared (Game, ServerState, EventType, ...).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  role         String   @default("admin")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+/// Manager-level key/value config. Secret values are AES-256-GCM encrypted at rest.
+model ManagerSetting {
+  key       String   @id
+  value     String
+  isSecret  Boolean  @default(false)
+  updatedAt DateTime @updatedAt
+}
+
+model Cluster {
+  id          String   @id @default(cuid())
+  name        String
+  clusterId   String   @unique // the ARK cluster id passed to member servers
+  transferDir String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  servers     Server[]
+}
+
+model Server {
+  id        String  @id @default(cuid())
+  name      String
+  game      String // Game enum value (ASA | ASE)
+  map       String
+  state     String  @default("Stopped") // ServerState enum value
+  maxPlayers Int    @default(70)
+
+  clusterId String?
+  cluster   Cluster? @relation(fields: [clusterId], references: [id])
+
+  // Allocated ports (deterministic block, see PortAllocation)
+  gamePort      Int
+  rawSocketPort Int
+  queryPort     Int
+  rconPort      Int
+
+  // Passwords — encrypted at rest, never serialized to the API
+  adminPasswordEnc     String?
+  serverPasswordEnc    String?
+  spectatorPasswordEnc String?
+
+  // Config + mods
+  configJson String @default("{}") // ServerConfigValues JSON
+  modIds     String @default("[]") // JSON array of CurseForge/Workshop ids
+
+  // Runtime tracking
+  containerId      String?
+  installedBuildId String?
+  updateAvailable  Boolean @default(false)
+  ramLimitMb       Int?
+  cpuLimit         Float?
+
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  modInstalls ModInstall[]
+  schedules   Schedule[]
+  snapshots   Snapshot[]
+
+  @@index([clusterId])
+}
+
+model Mod {
+  id           String  @id @default(cuid())
+  game         String
+  source       String // "curseforge" | "workshop"
+  remoteId     String // CurseForge project id / Workshop file id
+  name         String
+  thumbnailUrl String?
+
+  installs ModInstall[]
+
+  @@unique([game, source, remoteId])
+}
+
+model ModInstall {
+  id            String  @id @default(cuid())
+  serverId      String
+  server        Server  @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  modId         String
+  mod           Mod     @relation(fields: [modId], references: [id])
+  loadOrder     Int     @default(0)
+  pinnedVersion String?
+  enabled       Boolean @default(true)
+
+  @@unique([serverId, modId])
+}
+
+model Schedule {
+  id          String    @id @default(cuid())
+  serverId    String
+  server      Server    @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  name        String
+  cron        String
+  action      String // restart | update | backup | stop | start
+  warnMinutes Int       @default(10)
+  enabled     Boolean   @default(true)
+  lastRunAt   DateTime?
+  createdAt   DateTime  @default(now())
+}
+
+model Snapshot {
+  id        String   @id @default(cuid())
+  serverId  String
+  server    Server   @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  path      String
+  sizeBytes Int?
+  reason    String // manual | pre-update | pre-restart | scheduled
+  createdAt DateTime @default(now())
+}
+
+model SettingProfile {
+  id         String   @id @default(cuid())
+  name       String
+  game       String
+  configJson String
+  createdAt  DateTime @default(now())
+}
+
+model PortAllocation {
+  id        String   @id @default(cuid())
+  serverId  String   @unique
+  basePort  Int      @unique // block base; the 4 ports are derived from this
+  createdAt DateTime @default(now())
+}
+
+model Job {
+  id        String   @id @default(cuid())
+  serverId  String?
+  type      String // install | update | backup
+  state     String // pending | running | success | failed
+  progress  Int      @default(0)
+  log       String   @default("")
+  error     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model EventLog {
+  id        String   @id @default(cuid())
+  type      String
+  serverId  String?
+  clusterId String?
+  message   String
+  dataJson  String?
+  createdAt DateTime @default(now())
+
+  @@index([serverId])
+  @@index([createdAt])
+}

@@ -1,0 +1,22 @@
+{
+  "name": "ark-server-manager",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Docker-based control panel for ARK: Survival Ascended/Evolved dedicated servers (Unraid-first).",
+  "packageManager": "pnpm@9.15.9",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "pnpm -r --parallel --filter \"./apps/*\" dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "db:generate": "pnpm --filter @ark/api db:generate",
+    "db:migrate": "pnpm --filter @ark/api db:migrate",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}
