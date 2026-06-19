@@ -1,9 +1,10 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Plus, Play, Square, Download, Settings2, Boxes } from "lucide-react";
+import { Plus, Play, Square, Download, Settings2, Boxes, Loader2 } from "lucide-react";
 import {
   Game,
+  ServerState,
   ASA_OFFICIAL_MAPS,
   ASE_OFFICIAL_MAPS,
   mapLabel,
@@ -22,6 +23,7 @@ export default function DashboardPage() {
   const [servers, setServers] = useState<ServerSummary[]>([]);
   const [clusters, setClusters] = useState<ClusterLite[]>([]);
   const [creating, setCreating] = useState(false);
+  const [pending, setPending] = useState<Record<string, "install" | "start" | "stop">>({});
 
   const refresh = useCallback(() => {
     apiGet<ServerSummary[]>("/servers").then(setServers).catch(() => undefined);
@@ -36,8 +38,19 @@ export default function DashboardPage() {
   });
 
   const act = async (id: string, action: "install" | "start" | "stop") => {
-    await apiPost(`/servers/${id}/${action}`).catch((e) => alert(e.message));
-    refresh();
+    setPending((p) => ({ ...p, [id]: action }));
+    try {
+      await apiPost(`/servers/${id}/${action}`);
+      await apiGet<ServerSummary[]>("/servers").then(setServers); // await so state lands before re-enabling
+    } catch (e) {
+      alert((e as Error).message);
+    } finally {
+      setPending((p) => {
+        const n = { ...p };
+        delete n[id];
+        return n;
+      });
+    }
   };
 
   return (
@@ -81,14 +94,50 @@ export default function DashboardPage() {
               <StateBadge state={s.state} />
             </div>
             <div className="flex flex-wrap gap-2">
-              <button className="btn-secondary" onClick={() => act(s.id, "install")}>
-                <Download className="h-4 w-4" /> Install
+              <button
+                className="btn-secondary"
+                disabled={!!pending[s.id] || !(s.state === ServerState.Stopped || s.state === ServerState.Crashed)}
+                onClick={() => act(s.id, "install")}
+              >
+                {pending[s.id] === "install" || s.state === ServerState.Installing || s.state === ServerState.Updating ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" /> Installing…
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4" /> Install
+                  </>
+                )}
               </button>
-              <button className="btn-primary" onClick={() => act(s.id, "start")}>
-                <Play className="h-4 w-4" /> Start
+              <button
+                className="btn-primary"
+                disabled={!!pending[s.id] || !(s.state === ServerState.Stopped || s.state === ServerState.Crashed)}
+                onClick={() => act(s.id, "start")}
+              >
+                {pending[s.id] === "start" || s.state === ServerState.Starting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" /> Starting…
+                  </>
+                ) : (
+                  <>
+                    <Play className="h-4 w-4" /> Start
+                  </>
+                )}
               </button>
-              <button className="btn-secondary" onClick={() => act(s.id, "stop")}>
-                <Square className="h-4 w-4" /> Stop
+              <button
+                className="btn-secondary"
+                disabled={!!pending[s.id] || !(s.state === ServerState.Running || s.state === ServerState.Starting)}
+                onClick={() => act(s.id, "stop")}
+              >
+                {pending[s.id] === "stop" || s.state === ServerState.Stopping ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" /> Stopping…
+                  </>
+                ) : (
+                  <>
+                    <Square className="h-4 w-4" /> Stop
+                  </>
+                )}
               </button>
               <Link href={`/servers/${s.id}`} className="btn-secondary">
                 <Settings2 className="h-4 w-4" /> Manage

@@ -1,14 +1,21 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
-import { IsArray, IsBoolean, IsInt, IsOptional, IsString } from "class-validator";
-import { Game } from "@ark/shared";
+import { IsArray, IsBoolean, IsEnum, IsInt, IsOptional, IsString } from "class-validator";
+import { Game, type ModSort } from "@ark/shared";
 import { CurseForgeService } from "./curseforge.service";
 import { SteamService } from "./steam.service";
+import { FavoritesService } from "./favorites.service";
 import { ModsService } from "./mods.service";
 
 class AddModBody {
   @IsInt() remoteId!: number;
   @IsOptional() @IsString() name?: string;
   @IsOptional() @IsString() thumbnailUrl?: string;
+}
+class FavoriteBody {
+  @IsEnum(Game) game!: Game;
+  @IsInt() remoteId!: number;
+  @IsString() name!: string;
+  @IsOptional() @IsString() thumbnailUrl?: string | null;
 }
 class ReorderBody {
   @IsArray() order!: string[];
@@ -26,19 +33,55 @@ export class ModsController {
     private readonly mods: ModsService,
     private readonly curseforge: CurseForgeService,
     private readonly steam: SteamService,
+    private readonly favorites: FavoritesService,
   ) {}
 
   /** Mod browser — CurseForge for ASA, Steam Workshop for ASE. */
   @Get("mods/browse")
-  browse(@Query("query") query = "", @Query("page") page = "0", @Query("game") game = Game.ASA) {
+  browse(
+    @Query("query") query = "",
+    @Query("page") page = "0",
+    @Query("game") game: Game = Game.ASA,
+    @Query("sort") sort: ModSort = "relevance",
+    @Query("gameVersion") gameVersion?: string,
+    @Query("categoryId") categoryId?: string,
+  ) {
     return game === Game.ASE
-      ? this.steam.search(query, Number(page))
-      : this.curseforge.search(query, Number(page));
+      ? this.steam.search(query, Number(page), sort)
+      : this.curseforge.search(query, Number(page), sort, { gameVersion, categoryId });
+  }
+
+  /** Categories for the browser's filter (CurseForge only; ASE has none). */
+  @Get("mods/categories")
+  categories(@Query("game") game: Game = Game.ASA) {
+    return game === Game.ASE ? [] : this.curseforge.categories();
+  }
+
+  // ── Favorites (global per game) ────────────────────────────────────────────
+  @Get("mods/favorites")
+  listFavorites(@Query("game") game: Game = Game.ASA) {
+    return this.favorites.list(game);
+  }
+
+  @Post("mods/favorites")
+  addFavorite(@Body() body: FavoriteBody) {
+    return this.favorites.add(body.game, {
+      remoteId: body.remoteId,
+      name: body.name,
+      thumbnailUrl: body.thumbnailUrl ?? null,
+    });
+  }
+
+  @Delete("mods/favorites/:remoteId")
+  removeFavorite(@Param("remoteId") remoteId: string, @Query("game") game: Game = Game.ASA) {
+    return this.favorites.remove(game, Number(remoteId));
   }
 
   @Get("mods/:remoteId")
-  details(@Param("remoteId") remoteId: string) {
-    return this.curseforge.details(Number(remoteId));
+  details(@Param("remoteId") remoteId: string, @Query("game") game: Game = Game.ASA) {
+    return game === Game.ASE
+      ? this.steam.details(Number(remoteId))
+      : this.curseforge.details(Number(remoteId));
   }
 
   @Get("servers/:id/mods")

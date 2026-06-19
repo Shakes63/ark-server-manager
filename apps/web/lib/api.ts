@@ -41,7 +41,10 @@ export async function api<T = unknown>(path: string, init: RequestInit = {}): Pr
     throw new ApiError(res.status, Array.isArray(message) ? message.join(", ") : message);
   }
   if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
+  // Some endpoints (start/stop/restart) return an empty body — read as text and
+  // only parse when there's something, so an empty 200/201 isn't a JSON error.
+  const text = await res.text();
+  return (text ? JSON.parse(text) : undefined) as T;
 }
 
 export const apiGet = <T>(path: string) => api<T>(path);

@@ -109,6 +109,17 @@ export class DockerService {
     }
   }
 
+  /** Remove a server's container(s) by the ark.serverId label — robust to the
+   *  container's (now human-readable, renameable) name. */
+  async removeByServerId(serverId: string, force = true): Promise<void> {
+    const list = await this.docker
+      .listContainers({ all: true, filters: { label: [`ark.serverId=${serverId}`] } })
+      .catch(() => [] as Docker.ContainerInfo[]);
+    for (const c of list) {
+      await this.docker.getContainer(c.Id).remove({ force }).catch(() => undefined);
+    }
+  }
+
   async inspect(id: string) {
     return this.docker.getContainer(id).inspect();
   }

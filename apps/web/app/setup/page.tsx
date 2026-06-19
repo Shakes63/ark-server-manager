@@ -3,13 +3,14 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Rocket } from "lucide-react";
 import { apiPost, setToken } from "@/lib/api";
+import { TimezoneSelect, DEFAULT_TIMEZONE } from "@/components/timezone-select";
 
 export default function SetupPage() {
   const router = useRouter();
   const [form, setForm] = useState({
     username: "",
     password: "",
-    timezone: "UTC",
+    timezone: DEFAULT_TIMEZONE,
     curseForgeApiKey: "",
     steamWebApiKey: "",
   });
@@ -52,7 +53,10 @@ export default function SetupPage() {
         </div>
         <div>
           <label className="label">Timezone</label>
-          <input className="input" value={form.timezone} onChange={set("timezone")} />
+          <TimezoneSelect
+            value={form.timezone}
+            onChange={(tz) => setForm((f) => ({ ...f, timezone: tz }))}
+          />
         </div>
         <div>
           <label className="label">CurseForge API key (ASA mod browser — optional)</label>

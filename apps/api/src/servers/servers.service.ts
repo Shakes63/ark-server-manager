@@ -30,7 +30,6 @@ import { RconService } from "../rcon/rcon.service";
 import { StateMachineService } from "./state-machine.service";
 import { buildContainerSpec } from "./runtime-spec";
 import { derivePorts, nextBasePort } from "../catalog/ports";
-import { containerName } from "../common/naming";
 import { LocalPaths } from "../common/paths";
 import { SERVER_UID, SERVER_GID } from "../common/images";
 import { loadEnv } from "../config/env";
@@ -39,9 +38,11 @@ type ServerRow = Awaited<ReturnType<PrismaService["server"]["findUnique"]>> & {
   cluster?: { clusterId: string } | null;
 };
 
-// Verified against a real ASA boot on Unraid (2026-06-16): ARK logs
-// `... has successfully started!` then `Full Startup: <n> seconds`.
-const READY_RE = /(has successfully started|Full Startup:|advertising for join)/i;
+// Readiness markers across both runtimes. POK/ASA pipes ARK's own log to stdout
+// (`... has successfully started!` / `Full Startup:` / `advertising for join`);
+// the hermsi/ASE image instead prints arkmanager's `server is up` on stdout (the
+// game's advertising line goes to a file inside the container, not docker logs).
+const READY_RE = /(has successfully started|Full Startup:|advertising for join|server is up)/i;
 const CRASH_WINDOW_MS = 5 * 60_000;
 const CRASH_LIMIT = 3;
 
@@ -321,7 +322,7 @@ export class ServersService implements OnApplicationBootstrap {
     if (!server) throw new NotFoundException("Server not found");
     await this.withLock(id, async () => {
       if (server.containerId) await this.docker.remove(server.containerId).catch(() => undefined);
-      await this.docker.remove(containerName(id)).catch(() => undefined);
+      await this.docker.removeByServerId(id).catch(() => undefined);
       this.logStops.get(id)?.();
       this.logStops.delete(id);
       await this.prisma.portAllocation.deleteMany({ where: { serverId: id } });
@@ -402,7 +403,7 @@ export class ServersService implements OnApplicationBootstrap {
       });
 
       // Remove any stale container with the same name, then create+start.
-      await this.docker.remove(containerName(id)).catch(() => undefined);
+      await this.docker.removeByServerId(id).catch(() => undefined);
       await this.docker.pullImage(spec.Image as string).catch((e) =>
         this.logger.warn(`pull skipped: ${(e as Error).message}`),
       );
@@ -438,7 +439,7 @@ export class ServersService implements OnApplicationBootstrap {
     this.logStops.get(id)?.();
     this.logStops.delete(id);
     if (server.containerId) await this.docker.stop(server.containerId, 60).catch(() => undefined);
-    await this.docker.remove(containerName(id)).catch(() => undefined);
+    await this.docker.removeByServerId(id).catch(() => undefined);
     await this.prisma.server.update({ where: { id }, data: { containerId: null } });
     await this.sm.transition(id, ServerState.Stopped);
   }

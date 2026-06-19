@@ -37,7 +37,9 @@ export class RconService {
     // On the bridge, game containers are reachable by name on ark-net. With host
     // networking they bind on the host, so reach RCON via the host gateway (the
     // manager must run with --add-host host.docker.internal:host-gateway).
-    const host = loadEnv().GAME_HOST_NETWORK ? "host.docker.internal" : containerName(serverId);
+    const host = loadEnv().GAME_HOST_NETWORK
+      ? "host.docker.internal"
+      : containerName(serverId, server.name);
     const rcon = await Rcon.connect({ host, port: server.rconPort, password });
     rcon.on("error", () => this.pool.delete(serverId));
     rcon.on("end", () => this.pool.delete(serverId));

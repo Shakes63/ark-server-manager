@@ -1,8 +1,8 @@
 "use client";
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Play, Square, RotateCw, Download } from "lucide-react";
-import { mapLabel, type ServerSummary, type ServerConfigValues } from "@ark/shared";
+import { ArrowLeft, Play, Square, RotateCw, Download, Loader2 } from "lucide-react";
+import { mapLabel, ServerState, type ServerSummary, type ServerConfigValues } from "@ark/shared";
 import { apiGet, apiPost } from "@/lib/api";
 import { useRealtime } from "@/lib/socket";
 import { StateBadge } from "@/components/state-badge";
@@ -22,6 +22,7 @@ export default function ServerDetailPage({ params }: { params: Promise<{ id: str
   const [config, setConfig] = useState<ServerConfigValues | null>(null);
   const [configKey, setConfigKey] = useState(0); // bump to remount the editor on copy-in
   const [tab, setTab] = useState<Tab>("Overview");
+  const [pending, setPending] = useState<"install" | "start" | "stop" | "restart" | null>(null);
 
   // Keep the active tab in the URL (?tab=settings) so a refresh lands you back
   // on the same tab instead of Overview. Uses replaceState — no scroll/navigation.
@@ -37,9 +38,10 @@ export default function ServerDetailPage({ params }: { params: Promise<{ id: str
     window.history.replaceState(null, "", u);
   };
 
-  const refresh = useCallback(() => {
-    apiGet<ServerSummary>(`/servers/${id}`).then(setServer).catch(() => undefined);
-  }, [id]);
+  const refresh = useCallback(
+    () => apiGet<ServerSummary>(`/servers/${id}`).then(setServer).catch(() => undefined),
+    [id],
+  );
 
   // Re-fetch server + config and remount the settings editor (used after a
   // "copy from another server", which replaces this server's config wholesale).
@@ -62,11 +64,30 @@ export default function ServerDetailPage({ params }: { params: Promise<{ id: str
   }, id);
 
   const act = async (action: "install" | "start" | "stop" | "restart") => {
-    await apiPost(`/servers/${id}/${action}`).catch((e) => alert(e.message));
-    refresh();
+    setPending(action);
+    try {
+      await apiPost(`/servers/${id}/${action}`);
+      await refresh(); // await so the button stays disabled until the new state lands
+    } catch (e) {
+      alert((e as Error).message);
+    } finally {
+      setPending(null);
+    }
   };
 
   if (!server) return <div className="text-slate-400">Loading…</div>;
+
+  // Button availability follows the server state machine; `pending` covers the
+  // click→response gap so a button can't be re-clicked before its state lands.
+  const st = server.state;
+  const canStart = (st === ServerState.Stopped || st === ServerState.Crashed) && !pending;
+  const canStop = (st === ServerState.Running || st === ServerState.Starting) && !pending;
+  const canRestart = st === ServerState.Running && !pending;
+  const canInstall = (st === ServerState.Stopped || st === ServerState.Crashed) && !pending;
+  const showStarting = pending === "start" || st === ServerState.Starting;
+  const showStopping = pending === "stop" || st === ServerState.Stopping;
+  const showInstalling =
+    pending === "install" || st === ServerState.Installing || st === ServerState.Updating;
 
   return (
     <div className="space-y-6">
@@ -81,17 +102,21 @@ export default function ServerDetailPage({ params }: { params: Promise<{ id: str
         </div>
         <div className="flex flex-wrap gap-2">
           <CopyMenu server={server} onAfterCopyIn={reload} />
-          <button className="btn-secondary" onClick={() => act("install")}>
-            <Download className="h-4 w-4" /> Install / Update
+          <button className="btn-secondary" disabled={!canInstall} onClick={() => act("install")}>
+            {showInstalling ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}{" "}
+            {showInstalling ? "Installing…" : "Install / Update"}
           </button>
-          <button className="btn-primary" onClick={() => act("start")}>
-            <Play className="h-4 w-4" /> Start
+          <button className="btn-primary" disabled={!canStart} onClick={() => act("start")}>
+            {showStarting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}{" "}
+            {showStarting ? "Starting…" : "Start"}
           </button>
-          <button className="btn-secondary" onClick={() => act("restart")}>
-            <RotateCw className="h-4 w-4" /> Restart
+          <button className="btn-secondary" disabled={!canRestart} onClick={() => act("restart")}>
+            {pending === "restart" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCw className="h-4 w-4" />}{" "}
+            {pending === "restart" ? "Restarting…" : "Restart"}
           </button>
-          <button className="btn-secondary" onClick={() => act("stop")}>
-            <Square className="h-4 w-4" /> Stop
+          <button className="btn-secondary" disabled={!canStop} onClick={() => act("stop")}>
+            {showStopping ? <Loader2 className="h-4 w-4 animate-spin" /> : <Square className="h-4 w-4" />}{" "}
+            {showStopping ? "Stopping…" : "Stop"}
           </button>
         </div>
       </div>
