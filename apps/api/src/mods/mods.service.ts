@@ -110,7 +110,9 @@ export class ModsService {
     const ids = installs.map((i) => Number(i.mod.remoteId)).filter((n) => !Number.isNaN(n));
     await this.prisma.server.update({
       where: { id: serverId },
-      data: { modIds: JSON.stringify(ids) },
+      // configDirty: mod changes (add/remove/enable/disable/reorder) alter the
+      // launch line, so flag a restart on a running server just like settings do.
+      data: { modIds: JSON.stringify(ids), configDirty: true },
     });
   }
 }
