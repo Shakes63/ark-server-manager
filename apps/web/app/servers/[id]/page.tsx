@@ -6,6 +6,7 @@ import { mapLabel, ServerState, type ServerSummary, type ServerConfigValues } fr
 import { apiGet, apiPost, apiPatch } from "@/lib/api";
 import { useRealtime } from "@/lib/socket";
 import { StateBadge } from "@/components/state-badge";
+import { UpdateBadge } from "@/components/update-badge";
 import { ConnectCommand } from "@/components/connect-command";
 import { UnofficialListHelp } from "@/components/unofficial-list-help";
 import { SettingsForm } from "@/components/settings-form";
@@ -158,6 +159,7 @@ export default function ServerDetailPage({ params }: { params: Promise<{ id: str
             </>
           )}
           <StateBadge state={server.state} />
+          {server.updateAvailable && <UpdateBadge />}
         </div>
         <div className="flex flex-wrap gap-2">
           <CopyMenu server={server} onAfterCopyIn={reload} />

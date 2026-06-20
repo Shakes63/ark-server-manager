@@ -13,6 +13,7 @@ import {
 import { apiGet, apiPost } from "@/lib/api";
 import { useRealtime } from "@/lib/socket";
 import { StateBadge } from "@/components/state-badge";
+import { UpdateBadge } from "@/components/update-badge";
 import { ConnectCommand } from "@/components/connect-command";
 import { UnofficialListHelp } from "@/components/unofficial-list-help";
 
@@ -93,7 +94,10 @@ export default function DashboardPage() {
                   </Link>
                 )}
               </div>
-              <StateBadge state={s.state} />
+              <div className="flex flex-col items-end gap-1.5">
+                <StateBadge state={s.state} />
+                {s.updateAvailable && <UpdateBadge />}
+              </div>
             </div>
             <div className="flex flex-wrap gap-2">
               <button

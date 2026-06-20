@@ -15,6 +15,7 @@ import { ClustersModule } from "./clusters/clusters.module";
 import { BackupsModule } from "./backups/backups.module";
 import { NotificationsModule } from "./notifications/notifications.module";
 import { PresetsModule } from "./presets/presets.module";
+import { UpdatesModule } from "./updates/updates.module";
 import { HealthController } from "./health/health.controller";
 
 @Module({
@@ -37,6 +38,7 @@ import { HealthController } from "./health/health.controller";
     BackupsModule,
     NotificationsModule,
     PresetsModule,
+    UpdatesModule,
   ],
   controllers: [HealthController],
 })
