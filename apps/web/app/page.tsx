@@ -98,7 +98,16 @@ export default function DashboardPage() {
             <div className="flex flex-wrap gap-2">
               <button
                 className="btn-secondary"
-                disabled={!!pending[s.id] || !(s.state === ServerState.Stopped || s.state === ServerState.Crashed)}
+                disabled={
+                  !!pending[s.id] ||
+                  s.imageReady ||
+                  !(s.state === ServerState.Stopped || s.state === ServerState.Crashed)
+                }
+                title={
+                  s.imageReady
+                    ? "Game image already downloaded — just hit Start (game files install/update automatically)"
+                    : "Pre-pull the game server image (optional — Start does this too)"
+                }
                 onClick={() => act(s.id, "install")}
               >
                 {pending[s.id] === "install" || s.state === ServerState.Installing || s.state === ServerState.Updating ? (

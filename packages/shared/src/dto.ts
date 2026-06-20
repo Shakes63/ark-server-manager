@@ -13,6 +13,9 @@ export interface ServerSummary {
   ports: PortSet;
   installedBuildId?: string | null;
   updateAvailable: boolean;
+  /** The game's server image is already pulled locally — "Install" (an image
+   *  pull) would be a no-op, so the UI disables it. Game files install on Start. */
+  imageReady: boolean;
   /** Settings changed after the running container was created — a restart will
    *  apply them. The dashboard turns the Start button into Restart when set. */
   configDirty: boolean;

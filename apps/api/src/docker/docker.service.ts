@@ -54,6 +54,15 @@ export class DockerService {
     });
   }
 
+  /** Whether an image is already present locally (no registry round-trip). */
+  async imageExists(image: string): Promise<boolean> {
+    return this.docker
+      .getImage(image)
+      .inspect()
+      .then(() => true)
+      .catch(() => false);
+  }
+
   async getContainer(id: string) {
     return this.docker.getContainer(id);
   }

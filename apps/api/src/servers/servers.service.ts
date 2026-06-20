@@ -32,7 +32,7 @@ import { ManagerSettingsService } from "../manager-settings/manager-settings.ser
 import { buildContainerSpec } from "./runtime-spec";
 import { derivePorts, nextBasePort } from "../catalog/ports";
 import { LocalPaths } from "../common/paths";
-import { SERVER_UID, SERVER_GID } from "../common/images";
+import { IMAGES, SERVER_UID, SERVER_GID } from "../common/images";
 import { loadEnv } from "../config/env";
 
 type ServerRow = Awaited<ReturnType<PrismaService["server"]["findUnique"]>> & {
@@ -166,13 +166,18 @@ export class ServersService implements OnApplicationBootstrap {
   // ── CRUD ─────────────────────────────────────────────────────────────────--
   async list(): Promise<ServerSummary[]> {
     const rows = await this.prisma.server.findMany({ include: { cluster: true } });
-    return rows.map((r) => this.toSummary(r));
+    // One image-presence check per distinct game (image is shared per game).
+    const games = [...new Set(rows.map((r) => r.game as Game))];
+    const ready = new Map<Game, boolean>();
+    await Promise.all(games.map(async (g) => ready.set(g, await this.docker.imageExists(IMAGES[g]))));
+    return rows.map((r) => this.toSummary(r, ready.get(r.game as Game) ?? false));
   }
 
   async get(id: string): Promise<ServerSummary> {
     const row = await this.prisma.server.findUnique({ where: { id }, include: { cluster: true } });
     if (!row) throw new NotFoundException("Server not found");
-    return this.toSummary(row);
+    const imageReady = await this.docker.imageExists(IMAGES[row.game as Game]);
+    return this.toSummary(row, imageReady);
   }
 
   async getConfig(id: string): Promise<ServerConfigValues> {
@@ -590,7 +595,7 @@ export class ServersService implements OnApplicationBootstrap {
     }
   }
 
-  private toSummary(row: ServerRow): ServerSummary {
+  private toSummary(row: ServerRow, imageReady = false): ServerSummary {
     if (!row) throw new NotFoundException("Server not found");
     const serverPassword = (JSON.parse(row.configJson) as ServerConfigValues).values?.[
       "ServerPassword"
@@ -605,6 +610,7 @@ export class ServersService implements OnApplicationBootstrap {
       ports: this.portsOf(row) ?? DEFAULT_PORTS,
       installedBuildId: row.installedBuildId,
       updateAvailable: row.updateAvailable,
+      imageReady,
       configDirty: row.configDirty,
       joinPassword: typeof serverPassword === "string" && serverPassword ? serverPassword : null,
       playersOnline: null,
