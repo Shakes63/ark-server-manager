@@ -22,23 +22,18 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   @WebSocketServer()
   server!: Server;
 
-  handleConnection(client: Socket): void {
-    const serverId = client.handshake.query.serverId;
-    if (typeof serverId === "string" && serverId) {
-      void client.join(`server:${serverId}`);
-    }
+  handleConnection(_client: Socket): void {
+    // No per-server rooms: clients receive every message and filter by
+    // serverId/topic themselves. (Emitting to a room AND globally delivered room
+    // members two copies of each server-scoped message.)
   }
 
   handleDisconnect(_client: Socket): void {
-    // no-op; rooms clean up automatically
+    // no-op; sockets clean up automatically
   }
 
-  /** Broadcast to everyone, or to a server room if the message is server-scoped. */
+  /** Broadcast to all clients; each filters by serverId/topic itself. */
   broadcast(message: RealtimeMessage): void {
-    if (!this.server) return;
-    if (message.serverId) {
-      this.server.to(`server:${message.serverId}`).emit("message", message);
-    }
-    this.server.emit("message", message);
+    this.server?.emit("message", message);
   }
 }
