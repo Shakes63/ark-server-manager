@@ -580,6 +580,9 @@ export class ServersService implements OnApplicationBootstrap {
 
   private toSummary(row: ServerRow): ServerSummary {
     if (!row) throw new NotFoundException("Server not found");
+    const serverPassword = (JSON.parse(row.configJson) as ServerConfigValues).values?.[
+      "ServerPassword"
+    ];
     return {
       id: row.id,
       name: row.name,
@@ -591,6 +594,7 @@ export class ServersService implements OnApplicationBootstrap {
       installedBuildId: row.installedBuildId,
       updateAvailable: row.updateAvailable,
       configDirty: row.configDirty,
+      joinPassword: typeof serverPassword === "string" && serverPassword ? serverPassword : null,
       playersOnline: null,
       maxPlayers: row.maxPlayers,
       modIds: JSON.parse(row.modIds) as number[],

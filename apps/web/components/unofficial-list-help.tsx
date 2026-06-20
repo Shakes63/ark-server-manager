@@ -12,11 +12,15 @@ import { Check, X, Search, ChevronDown } from "lucide-react";
 export function UnofficialListHelp({
   serverName,
   mapName,
+  hasJoinPassword = false,
   defaultOpen = false,
   className = "",
 }: {
   serverName: string;
   mapName: string;
+  /** When the server has a join password, the player must enable the
+   *  password-protected filter (off otherwise) to see it. */
+  hasJoinPassword?: boolean;
   defaultOpen?: boolean;
   className?: string;
 }) {
@@ -43,7 +47,11 @@ export function UnofficialListHelp({
           </p>
           <FilterRow state="on" label="Show Player Servers" />
           <FilterRow state="off" label="PC-Only Online Multiplayer" hint="hides crossplay servers" />
-          <FilterRow state="off" label="Show Password Protected Servers" hint="ON only if you set a join password" />
+          <FilterRow
+            state={hasJoinPassword ? "on" : "off"}
+            label="Show Password Protected Servers"
+            hint={hasJoinPassword ? "your server has a join password" : "ON only if you set a join password"}
+          />
           <p className="pt-1 leading-snug text-slate-400">
             Then search the name <span className="font-mono text-slate-200">{serverName}</span>
             {mapName ? (

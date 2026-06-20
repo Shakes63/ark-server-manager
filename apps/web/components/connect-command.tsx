@@ -14,9 +14,12 @@ import { Copy, Check, Terminal } from "lucide-react";
  */
 export function ConnectCommand({
   gamePort,
+  joinPassword,
   className = "",
 }: {
   gamePort: number;
+  /** Server join password, if set — appended so the connect command authenticates. */
+  joinPassword?: string | null;
   className?: string;
 }) {
   const [host, setHost] = useState("");
@@ -28,7 +31,10 @@ export function ConnectCommand({
     setHost(window.location.hostname);
   }, []);
 
-  const cmd = `open ${host || "<server-ip>"}:${gamePort}`;
+  // ARK appends the join password to the travel URL after a "?". (ARK's console
+  // password syntax is finicky/under-documented; this matches the community form.)
+  const cmd =
+    `open ${host || "<server-ip>"}:${gamePort}` + (joinPassword ? `?${joinPassword}` : "");
 
   const copy = async () => {
     try {
@@ -79,6 +85,7 @@ export function ConnectCommand({
       <p className="mt-1 text-[11px] leading-snug text-slate-500">
         Open the ARK console (<kbd className="rounded bg-ark-panel px-1 font-mono">~</kbd>), paste, press
         Enter.
+        {joinPassword ? " Includes the join password." : ""}
       </p>
     </div>
   );

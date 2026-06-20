@@ -164,8 +164,12 @@ export default function DashboardPage() {
                 <Settings2 className="h-4 w-4" /> Manage
               </Link>
             </div>
-            <ConnectCommand gamePort={s.ports.game} />
-            <UnofficialListHelp serverName={s.name} mapName={mapLabel(s.map)} />
+            <ConnectCommand gamePort={s.ports.game} joinPassword={s.joinPassword} />
+            <UnofficialListHelp
+              serverName={s.name}
+              mapName={mapLabel(s.map)}
+              hasJoinPassword={Boolean(s.joinPassword)}
+            />
           </div>
         ))}
       </div>

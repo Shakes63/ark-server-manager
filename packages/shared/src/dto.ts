@@ -16,6 +16,10 @@ export interface ServerSummary {
   /** Settings changed after the running container was created — a restart will
    *  apply them. The dashboard turns the Start button into Restart when set. */
   configDirty: boolean;
+  /** Plain-text server join password (the ServerPassword setting), or null. Used
+   *  by the UI to build the connect command and tailor the browser-filter hint.
+   *  Plain text is intentional (see ServerPassword in the catalog). */
+  joinPassword?: string | null;
   playersOnline?: number | null;
   maxPlayers: number;
   modIds: number[];

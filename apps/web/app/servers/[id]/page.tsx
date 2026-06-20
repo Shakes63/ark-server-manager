@@ -174,10 +174,15 @@ function Overview({ server }: { server: ServerSummary }) {
           </div>
         ))}
       </dl>
-      <ConnectCommand gamePort={server.ports.game} className="mt-4 max-w-sm" />
+      <ConnectCommand
+        gamePort={server.ports.game}
+        joinPassword={server.joinPassword}
+        className="mt-4 max-w-sm"
+      />
       <UnofficialListHelp
         serverName={server.name}
         mapName={mapLabel(server.map)}
+        hasJoinPassword={Boolean(server.joinPassword)}
         defaultOpen
         className="mt-3 max-w-sm"
       />
