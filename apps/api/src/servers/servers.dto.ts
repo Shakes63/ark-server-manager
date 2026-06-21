@@ -13,7 +13,7 @@ import { Game } from "@ark/shared";
 
 export class CreateServerBody {
   @IsString() name!: string;
-  @IsIn([Game.ASA, Game.ASE]) game!: Game;
+  @IsIn(Object.values(Game)) game!: Game; // every supported game (ASA, ASE, CONAN, …)
   @IsString() map!: string;
   @IsOptional() @IsInt() @Min(1) maxPlayers?: number;
   @IsOptional() @IsString() clusterId?: string | null;
