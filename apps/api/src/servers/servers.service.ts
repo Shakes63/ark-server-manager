@@ -20,6 +20,7 @@ import {
   type ServerSummary,
   type ServerStats,
   type ServerStatsById,
+  type ServerStatsDetail,
   type ServerConfigValues,
 } from "@ark/shared";
 import { PrismaService } from "../prisma/prisma.service";
@@ -36,6 +37,7 @@ import { buildContainerSpec } from "./runtime-spec";
 import { derivePorts, nextBasePort } from "../catalog/ports";
 import { LocalPaths } from "../common/paths";
 import { containerName } from "../common/naming";
+import { hostStats } from "../common/host-stats";
 import { IMAGES, SERVER_UID, SERVER_GID } from "../common/images";
 import { loadEnv } from "../config/env";
 
@@ -226,10 +228,14 @@ export class ServersService implements OnApplicationBootstrap {
 
   /** Live resource usage: CPU% + memory from Docker, plus the on-disk instance
    *  size (cached + background-refreshed). */
-  async stats(id: string): Promise<ServerStats> {
+  async stats(id: string): Promise<ServerStatsDetail> {
     const server = await this.prisma.server.findUnique({ where: { id } });
     if (!server) throw new NotFoundException("Server not found");
-    return this.statsFor(server.id, server.containerId);
+    const [serverStats, host] = await Promise.all([
+      this.statsFor(server.id, server.containerId),
+      hostStats(loadEnv().DATA_DIR),
+    ]);
+    return { ...serverStats, host };
   }
 
   /** Stats for every server, keyed by id (for the servers list). */

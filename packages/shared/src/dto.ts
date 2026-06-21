@@ -47,6 +47,19 @@ export interface ServerStats {
 /** Batch stats keyed by server id (for the servers list). */
 export type ServerStatsById = ServerStats & { id: string };
 
+/** Whole-machine resource usage (the Unraid host), for context next to a server. */
+export interface HostStats {
+  cpuPercent: number | null;
+  memUsedMb: number;
+  memTotalMb: number;
+  diskUsedMb: number;
+  diskFreeMb: number;
+  diskTotalMb: number;
+}
+
+/** A single server's stats plus the host totals (the detail endpoint). */
+export type ServerStatsDetail = ServerStats & { host: HostStats };
+
 export interface CreateServerDto {
   name: string;
   game: Game;
