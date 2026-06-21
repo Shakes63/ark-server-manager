@@ -1,13 +1,23 @@
 import { Injectable, Logger, BadRequestException } from "@nestjs/common";
 import { Rcon } from "rcon-client";
-import { EventType, RealtimeTopic } from "@ark/shared";
+import { EventType, RealtimeTopic, Game } from "@ark/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { CryptoService } from "../crypto/crypto.service";
 import { EventsService } from "../events/events.service";
 import { RealtimeGateway } from "../realtime/realtime.gateway";
 import { LogCaptureService } from "../logs/log-capture.service";
+import { SourceRcon } from "./source-rcon";
 import { containerName } from "../common/naming";
 import { loadEnv } from "../config/env";
+
+/** The slice of a connection RconService uses — satisfied by both rcon-client's
+ *  Rcon (ARK/ASE) and our lenient SourceRcon (Conan). */
+interface RconConn {
+  connect(): Promise<unknown>;
+  send(command: string): Promise<string>;
+  end(): Promise<unknown>;
+  on(event: "error" | "end", listener: (...args: unknown[]) => void): unknown;
+}
 
 /**
  * RCON access to running servers. Connections are pooled per server and reused;
@@ -16,7 +26,7 @@ import { loadEnv } from "../config/env";
 @Injectable()
 export class RconService {
   private readonly logger = new Logger(RconService.name);
-  private readonly pool = new Map<string, Rcon>();
+  private readonly pool = new Map<string, RconConn>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -26,7 +36,7 @@ export class RconService {
     private readonly logCapture: LogCaptureService,
   ) {}
 
-  private async connect(serverId: string): Promise<Rcon> {
+  private async connect(serverId: string): Promise<RconConn> {
     const existing = this.pool.get(serverId);
     if (existing) return existing;
 
@@ -54,7 +64,12 @@ export class RconService {
     // on an emitter with NO 'error' listener. Node then throws an unhandled 'error'
     // event and the ENTIRE manager process crashes. Attaching first closes that
     // window for the connection's whole lifetime.
-    const rcon = new Rcon({ host, port: server.rconPort, password, timeout: 10_000 });
+    // Conan Exiles replies to RCON commands with a non-matching packet id, which
+    // makes rcon-client's strict id matching time out on every command (auth still
+    // succeeds). Route Conan through our lenient SourceRcon; ARK/ASE keep
+    // rcon-client, which they work with. (See source-rcon.ts.)
+    const opts = { host, port: server.rconPort, password, timeout: 10_000 };
+    const rcon: RconConn = server.game === Game.CONAN ? new SourceRcon(opts) : new Rcon(opts);
     rcon.on("error", () => this.pool.delete(serverId));
     rcon.on("end", () => this.pool.delete(serverId));
     await rcon.connect();
