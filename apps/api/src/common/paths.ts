@@ -31,13 +31,14 @@ export const LocalPaths = {
     return `${loadEnv().DATA_DIR}/instances/${serverId}`;
   },
   /**
-   * The ARK world save dir inside an instance — the world, configs, player
-   * profiles, and tribes. BOTH POK/ASA and hermsi/ASE store saves under
-   * `ShooterGame/Saved`, NOT the instance root. Backup, restore, and import all
-   * operate on this; pointing them at the root finds nothing (ENOENT).
+   * The world save dir inside an instance — the world, configs, players/tribes.
+   * Game-specific: ARK (POK/ASA + hermsi/ASE) stores saves under `ShooterGame/Saved`;
+   * Conan stores them under `server/ConanSandbox/Saved` (the SQLite world DB + Config).
+   * Backup, restore, and import all operate on this; the wrong path finds nothing.
    */
-  savedDir(serverId: string): string {
-    return `${this.instanceRoot(serverId)}/ShooterGame/Saved`;
+  savedDir(serverId: string, game: Game): string {
+    const sub = game === Game.CONAN ? "server/ConanSandbox/Saved" : "ShooterGame/Saved";
+    return `${this.instanceRoot(serverId)}/${sub}`;
   },
   /** Warmed golden copy of a game's files, reflink-cloned into each instance. */
   gameCache(game: Game): string {

@@ -1,13 +1,24 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
-import { cp, mkdir, rm } from "node:fs/promises";
+import { cp, mkdir, readdir, rm } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { join, relative, sep } from "node:path";
-import { ServerState, EventType } from "@ark/shared";
+import { ServerState, EventType, Game } from "@ark/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { EventsService } from "../events/events.service";
 import { RconService } from "../rcon/rcon.service";
 import { ManagerSettingsService } from "../manager-settings/manager-settings.service";
 import { LocalPaths } from "../common/paths";
 import { loadEnv } from "../config/env";
+
+const execFileP = promisify(execFile);
+
+// Conan's Saved dir holds the live SQLite world DB (game_N.db) + Config; the image
+// also keeps its OWN rolling backups (game_N_backup_M.db) and noisy Logs/Crashes.
+// We back up only the live DBs + config, dropping the image's rolling dupes (our
+// retention is the history) and logs — a snapshot shrinks from ~40 MB to ~1 MB.
+const CONAN_SKIP_DIRS = new Set(["Logs", "Crashes", "Cache"]);
+const CONAN_ROLLING_DB = /^game_\d+_backup_\d+\.db$/i;
 
 // ARK keeps its OWN rolling dated backups (Map_DD.MM.YYYY_HH.MM.SS.{ark,arkrbf}),
 // an anti-corruption .bak, and noisy Logs/Cache dirs. Our snapshot only needs the
@@ -52,18 +63,27 @@ export class BackupsService {
   /** Save the world (best-effort) then copy the Saved dir into backups/. */
   async create(serverId: string, reason: string) {
     const env = loadEnv();
-    await this.rcon.saveWorld(serverId).catch(() => undefined);
+    const server = await this.prisma.server.findUnique({ where: { id: serverId } });
+    if (!server) throw new NotFoundException("Server not found");
+    const game = server.game as Game;
+    await this.rcon.saveWorld(serverId).catch(() => undefined); // no-op on Conan
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const src = LocalPaths.savedDir(serverId); // ShooterGame/Saved — the actual world
+    const src = LocalPaths.savedDir(serverId, game);
     const destDir = join(env.DATA_DIR, "backups", serverId);
     const dest = join(destDir, `${reason}-${stamp}`);
     await mkdir(destDir, { recursive: true });
-    await cp(src, dest, {
-      recursive: true,
-      filter: (s) => includeInBackup(relative(src, s)),
-    }).catch((err) => {
+    try {
+      if (game === Game.CONAN) {
+        await this.backupConanSaved(src, dest);
+      } else {
+        await cp(src, dest, {
+          recursive: true,
+          filter: (s) => includeInBackup(relative(src, s)),
+        });
+      }
+    } catch (err) {
       throw new BadRequestException(`Backup failed: ${(err as Error).message}`);
-    });
+    }
 
     const snapshot = await this.prisma.snapshot.create({ data: { serverId, path: dest, reason } });
     await this.events.emit({
@@ -86,9 +106,11 @@ export class BackupsService {
     const snap = await this.prisma.snapshot.findUnique({ where: { id: snapshotId } });
     if (!snap) throw new NotFoundException("Backup not found");
 
-    const dest = LocalPaths.savedDir(serverId); // ShooterGame/Saved — the actual world
+    const dest = LocalPaths.savedDir(serverId, server.game as Game);
     // Snapshot the current state first so a restore is itself reversible.
     await this.create(serverId, "pre-restore").catch(() => undefined);
+    // Replace the live save dir wholesale — removing Conan's live .db-wal/.db-shm
+    // too, so the restored DB isn't shadowed by a stale WAL.
     await rm(dest, { recursive: true, force: true });
     await cp(snap.path, dest, { recursive: true });
     await this.events.emit({
@@ -97,6 +119,49 @@ export class BackupsService {
       serverId,
     });
     return { restored: true };
+  }
+
+  /**
+   * Back up Conan's Saved dir: a consistent online copy of each live SQLite world
+   * DB (game_N.db) plus the small static files (Config/, serveruid.txt), skipping
+   * the image's own rolling backups and logs. sqlite3's `.backup` snapshots a live
+   * DB safely; if it's unavailable we fall back to copying the DB + its WAL sidecars
+   * (WAL mode keeps the main file valid, and the WAL brings it current).
+   */
+  private async backupConanSaved(src: string, dest: string): Promise<void> {
+    await mkdir(dest, { recursive: true });
+    const entries = await readdir(src, { withFileTypes: true });
+    for (const e of entries) {
+      const name = e.name;
+      if (CONAN_SKIP_DIRS.has(name)) continue; // Logs, Crashes, Cache
+      if (CONAN_ROLLING_DB.test(name)) continue; // the image's own rolling backups
+      if (/\.db-(wal|shm)$/.test(name)) continue; // copied alongside their .db (fallback only)
+      const from = join(src, name);
+      const to = join(dest, name);
+      if (name.endsWith(".db")) {
+        await this.backupSqliteDb(from, to);
+      } else {
+        await cp(from, to, { recursive: true }); // Config/, serveruid.txt, …
+      }
+    }
+  }
+
+  /** Consistent copy of one live SQLite DB (sqlite3 .backup), with a file-copy
+   *  fallback (DB + WAL sidecars) if sqlite3 isn't present. */
+  private async backupSqliteDb(from: string, to: string): Promise<void> {
+    try {
+      // -readonly: open the live DB for reading only (the game owns the file; the
+      // manager just needs to read it), and .backup snapshots it consistently.
+      await execFileP("sqlite3", ["-readonly", from, `.backup '${to}'`]);
+    } catch (err) {
+      this.logger.warn(
+        `sqlite3 backup of ${from} failed (${(err as Error).message}); copying the DB + WAL instead`,
+      );
+      await cp(from, to);
+      for (const ext of ["-wal", "-shm"]) {
+        await cp(`${from}${ext}`, `${to}${ext}`).catch(() => undefined); // may not exist
+      }
+    }
   }
 
   async remove(snapshotId: string) {
