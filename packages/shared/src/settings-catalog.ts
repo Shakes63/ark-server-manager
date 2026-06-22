@@ -24,6 +24,8 @@ export type SettingValueType =
   | "string"
   | "enum"
   | "multiselect" // value: string[] of selected choice values
+  | "time" // 24h "HH:MM" string, edited via a native (locale 12h) time picker
+  | "weekdays" // comma-joined day names, e.g. "Saturday,Sunday" — day-chip picker
   // structured widgets (Tier B):
   | "grid" // per-stat multiplier grid (value: Record<statKey, number>)
   | "motd" // message of the day (value: { message, duration })

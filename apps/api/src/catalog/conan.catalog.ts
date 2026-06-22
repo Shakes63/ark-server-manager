@@ -326,23 +326,23 @@ const settings: SettingDef[] = [
   // ── Schedules (leave blank for unrestricted) ───────────────────────────────
   // Day list (e.g. "Saturday,Sunday" or "weekend"/"weekday") + HH:MM start/end, in
   // the server's timezone. The image converts these to the per-day ini windows.
-  cset("PVP_TIME_DAYS", "PvP days", "Schedules", "string", "", {
-    help: 'When PvP is allowed. Days like "Saturday,Sunday" or "weekend". Blank = always on.',
+  cset("PVP_TIME_DAYS", "PvP days", "Schedules", "weekdays", "", {
+    help: "Days PvP is allowed. Pick none to leave PvP always on.",
   }),
-  cset("PVP_TIME_START", "PvP start (HH:MM)", "Schedules", "string", "", {
-    help: "Time PvP turns on each day (24-hour, server timezone).",
+  cset("PVP_TIME_START", "PvP start", "Schedules", "time", "", {
+    help: "Time PvP turns on each day (server timezone).",
   }),
-  cset("PVP_TIME_END", "PvP end (HH:MM)", "Schedules", "string", "", {
-    help: "Time PvP turns off each day (24-hour, server timezone).",
+  cset("PVP_TIME_END", "PvP end", "Schedules", "time", "", {
+    help: "Time PvP turns off each day (server timezone).",
   }),
-  cset("PVP_BUILDING_DAMAGE_DAYS", "Raid (building damage) days", "Schedules", "string", "", {
-    help: 'When buildings can be damaged. Days like "Friday,Saturday". Blank = follows PvP.',
+  cset("PVP_BUILDING_DAMAGE_DAYS", "Raid (building damage) days", "Schedules", "weekdays", "", {
+    help: "Days buildings can be damaged. Pick none to follow the PvP schedule.",
   }),
-  cset("PVP_BUILDING_DAMAGE_START", "Raid start (HH:MM)", "Schedules", "string", "", {
-    help: "Time raiding (building damage) turns on (24-hour, server timezone).",
+  cset("PVP_BUILDING_DAMAGE_START", "Raid start", "Schedules", "time", "", {
+    help: "Time raiding (building damage) turns on (server timezone).",
   }),
-  cset("PVP_BUILDING_DAMAGE_END", "Raid end (HH:MM)", "Schedules", "string", "", {
-    help: "Time raiding (building damage) turns off (24-hour, server timezone).",
+  cset("PVP_BUILDING_DAMAGE_END", "Raid end", "Schedules", "time", "", {
+    help: "Time raiding (building damage) turns off (server timezone).",
   }),
 ];
 

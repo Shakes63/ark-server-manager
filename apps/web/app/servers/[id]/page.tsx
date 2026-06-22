@@ -246,8 +246,10 @@ function Overview({ server, onChanged }: { server: ServerSummary; onChanged: () 
           className="mt-4 max-w-sm"
         />
         <UnofficialListHelp
+          game={server.game}
           serverName={server.name}
           mapName={mapLabel(server.map)}
+          queryPort={server.ports.query}
           hasJoinPassword={Boolean(server.joinPassword)}
           defaultOpen
           className="mt-3 max-w-sm"

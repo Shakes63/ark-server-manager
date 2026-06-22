@@ -217,8 +217,10 @@ export default function DashboardPage() {
               joinPassword={s.joinPassword}
             />
             <UnofficialListHelp
+              game={s.game}
               serverName={s.name}
               mapName={mapLabel(s.map)}
+              queryPort={s.ports.query}
               hasJoinPassword={Boolean(s.joinPassword)}
             />
           </div>

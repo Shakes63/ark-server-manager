@@ -831,6 +831,15 @@ function Field({
         </select>
       ) : def.type === "multiselect" ? (
         <MultiSelectField def={def} value={value} onChange={onChange} />
+      ) : def.type === "weekdays" ? (
+        <WeekdaysField def={def} value={value} onChange={onChange} />
+      ) : def.type === "time" ? (
+        <input
+          type="time"
+          className="input w-auto"
+          value={String(value ?? "")}
+          onChange={(e) => onChange(def.key, e.target.value)}
+        />
       ) : def.type === "string" ? (
         <input className="input" value={String(value)} onChange={(e) => onChange(def.key, e.target.value)} />
       ) : (
@@ -1083,6 +1092,53 @@ function MultiSelectField({ def, value, onChange }: WidgetProps) {
           {c.label}
         </label>
       ))}
+    </div>
+  );
+}
+
+const WEEKDAYS = [
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+  "Sunday",
+] as const;
+
+/** Day-of-week picker — toggle chips, stored as a comma-joined string in weekday
+ *  order (e.g. "Saturday,Sunday"). Empty = every day / unrestricted. */
+function WeekdaysField({ def, value, onChange }: WidgetProps) {
+  const selected = new Set(
+    String(value ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+  );
+  const toggle = (day: string) => {
+    const next = new Set(selected);
+    next.has(day) ? next.delete(day) : next.add(day);
+    onChange(def.key, WEEKDAYS.filter((d) => next.has(d)).join(","));
+  };
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {WEEKDAYS.map((d) => {
+        const on = selected.has(d);
+        return (
+          <button
+            type="button"
+            key={d}
+            onClick={() => toggle(d)}
+            className={`rounded-md border px-2 py-1 text-xs font-medium transition-colors ${
+              on
+                ? "border-ark-accent bg-ark-accent/15 text-ark-accent"
+                : "border-ark-border text-slate-300 hover:border-slate-600"
+            }`}
+          >
+            {d.slice(0, 3)}
+          </button>
+        );
+      })}
     </div>
   );
 }
