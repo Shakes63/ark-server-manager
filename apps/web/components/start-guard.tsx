@@ -1,6 +1,6 @@
 "use client";
 import { useState, type ReactNode } from "react";
-import { AlertTriangle, Square, Loader2, Zap, X } from "lucide-react";
+import { AlertTriangle, ArrowRightLeft, Loader2, Zap, X } from "lucide-react";
 import { GAME_LABELS, type InsufficientRamInfo } from "@ark/shared";
 import { apiPost, ApiError } from "@/lib/api";
 
@@ -21,11 +21,14 @@ function StartGuardDialog({
   onForce: () => void;
   onClose: () => void;
 }) {
+  // Auto-stop off → just warn. On → offer a swap: one running server is a simple
+  // "back it up + shut it down, then start this" confirm; several is a picker.
+  const swap = info.autoStop && info.running.length > 0;
+  const single = swap && info.running.length === 1;
+  const only = info.running[0];
+
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-      onClick={onClose}
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
       <div className="card w-full max-w-md space-y-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start gap-2">
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
@@ -38,9 +41,16 @@ function StartGuardDialog({
           </div>
         </div>
 
-        {info.running.length > 0 ? (
+        {single ? (
+          <p className="rounded-md border border-ark-border bg-ark-bg px-3 py-2 text-sm text-slate-300">
+            This will <span className="text-slate-100">back up and shut down “{only.name}”</span> (
+            {GAME_LABELS[only.game]}), then start “{serverName}”.
+          </p>
+        ) : swap ? (
           <div className="space-y-2">
-            <p className="text-xs uppercase tracking-wide text-slate-500">Stop one to free RAM, then start:</p>
+            <p className="text-xs uppercase tracking-wide text-slate-500">
+              Back up &amp; shut one down, then start:
+            </p>
             {info.running.map((r) => (
               <div
                 key={r.id}
@@ -53,24 +63,33 @@ function StartGuardDialog({
                   </div>
                 </div>
                 <button className="btn-secondary shrink-0" disabled={busy} onClick={() => onStopAndStart(r.id)}>
-                  {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Square className="h-4 w-4" />} Stop &amp; start
+                  {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRightLeft className="h-4 w-4" />}{" "}
+                  Back up &amp; switch
                 </button>
               </div>
             ))}
           </div>
         ) : (
           <p className="text-sm text-slate-400">
-            No game servers are running — free up RAM on the host, or start anyway.
+            {info.running.length > 0
+              ? "Auto-stop is off — stop a running server yourself first, or start anyway."
+              : "No game servers are running — free up RAM on the host, or start anyway."}
           </p>
         )}
 
-        <div className="flex items-center justify-end gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <button className="btn-secondary" onClick={onClose} disabled={busy}>
             <X className="h-4 w-4" /> Cancel
           </button>
           <button className="btn-secondary" onClick={onForce} disabled={busy}>
             <Zap className="h-4 w-4" /> Start anyway
           </button>
+          {single && (
+            <button className="btn-primary" onClick={() => onStopAndStart(only.id)} disabled={busy}>
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRightLeft className="h-4 w-4" />} Back
+              up &amp; switch
+            </button>
+          )}
         </div>
       </div>
     </div>

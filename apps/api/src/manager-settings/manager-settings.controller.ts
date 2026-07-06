@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Patch } from "@nestjs/common";
 import { ModuleRef } from "@nestjs/core";
-import { IsInt, IsOptional, IsString, Max, Min } from "class-validator";
+import { IsBoolean, IsInt, IsOptional, IsString, Max, Min } from "class-validator";
 import { ManagerSettingsService, SettingKeys } from "./manager-settings.service";
 import { SchedulerService } from "../scheduler/scheduler.service";
 
@@ -9,6 +9,7 @@ class UpdateSettingsBody {
   @IsOptional() @IsString() curseForgeApiKey?: string;
   @IsOptional() @IsString() steamWebApiKey?: string;
   @IsOptional() @IsInt() @Min(1) @Max(500) backupKeep?: number;
+  @IsOptional() @IsBoolean() autoStopOnStart?: boolean;
 }
 
 @Controller("settings")
@@ -39,6 +40,8 @@ export class ManagerSettingsController {
       await this.settings.set(SettingKeys.SteamWebApiKey, body.steamWebApiKey);
     if (body.backupKeep !== undefined)
       await this.settings.set(SettingKeys.BackupKeep, String(body.backupKeep));
+    if (body.autoStopOnStart !== undefined)
+      await this.settings.set(SettingKeys.AutoStopOnStart, String(body.autoStopOnStart));
     return this.settings.publicView();
   }
 }

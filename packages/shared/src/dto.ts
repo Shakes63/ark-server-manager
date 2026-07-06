@@ -66,6 +66,9 @@ export interface InsufficientRamInfo {
   availableMb: number;
   totalMb: number;
   running: RunningServerRam[];
+  /** Whether the "auto-stop to free RAM" setting is on — decides if the start guard
+   *  offers to back up + stop a running server (a swap) or just warns. */
+  autoStop: boolean;
 }
 
 /** Whole-machine resource usage (the Unraid host), for context next to a server. */

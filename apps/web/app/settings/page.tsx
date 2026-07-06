@@ -13,6 +13,7 @@ export default function SettingsPage() {
   const [steamWebApiKey, setSteamWebApiKey] = useState("");
   const [discordWebhookUrl, setDiscordWebhookUrl] = useState("");
   const [backupKeep, setBackupKeep] = useState("10");
+  const [autoStop, setAutoStop] = useState(true);
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
   const [testMsg, setTestMsg] = useState<string | null>(null);
@@ -26,6 +27,7 @@ export default function SettingsPage() {
         setTimezone(typeof v.timezone === "string" && v.timezone ? v.timezone : detectZone());
         if (typeof v.discord_webhook_url === "string") setDiscordWebhookUrl(v.discord_webhook_url);
         if (typeof v.backup_keep === "string" && v.backup_keep) setBackupKeep(v.backup_keep);
+        setAutoStop(v.auto_stop_on_start !== "false"); // default on when unset
       })
       .catch(() => undefined);
   };
@@ -37,12 +39,13 @@ export default function SettingsPage() {
     setBusy(true);
     setSaved(false);
     try {
-      const settingsBody: Record<string, string | number> = {};
+      const settingsBody: Record<string, string | number | boolean> = {};
       if (timezone) settingsBody.timezone = timezone;
       if (curseForgeApiKey) settingsBody.curseForgeApiKey = curseForgeApiKey;
       if (steamWebApiKey) settingsBody.steamWebApiKey = steamWebApiKey;
       const keep = parseInt(backupKeep, 10);
       if (Number.isFinite(keep) && keep >= 1) settingsBody.backupKeep = keep;
+      settingsBody.autoStopOnStart = autoStop;
       if (Object.keys(settingsBody).length) await apiPatch("/settings", settingsBody);
       await apiPatch("/notifications/webhook", { discordWebhookUrl });
       setCurseForgeApiKey("");
@@ -129,6 +132,26 @@ export default function SettingsPage() {
             just the live world, players, and config (ARK&apos;s own dated copies + logs are skipped).
           </p>
         </div>
+      </div>
+
+      <div className="card space-y-3">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-ark-accent2">Start guard</h2>
+        <label className="flex items-start gap-3 text-sm text-slate-200">
+          <input
+            type="checkbox"
+            className="mt-0.5 h-4 w-4"
+            checked={autoStop}
+            onChange={(e) => setAutoStop(e.target.checked)}
+          />
+          <span>
+            Auto-stop a running server to free RAM
+            <span className="mt-1 block text-xs font-normal text-slate-500">
+              When starting a server would exceed free memory, offer to back up and shut down a running one,
+              then start the new one. You still confirm first — with a single running server it&apos;s a quick
+              warning. Off: a start that won&apos;t fit is just blocked with a warning.
+            </span>
+          </span>
+        </label>
       </div>
 
       <div className="card space-y-4">

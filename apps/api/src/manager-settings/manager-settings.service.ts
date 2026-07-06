@@ -10,6 +10,7 @@ export const SettingKeys = {
   SteamWebApiKey: "steam_web_api_key", // secret
   DiscordWebhook: "discord_webhook_url",
   BackupKeep: "backup_keep",
+  AutoStopOnStart: "auto_stop_on_start",
   Initialized: "initialized",
 } as const;
 
@@ -48,6 +49,12 @@ export class ManagerSettingsService {
   async getBackupKeep(): Promise<number> {
     const n = parseInt((await this.get(SettingKeys.BackupKeep)) ?? "", 10);
     return Number.isFinite(n) && n >= 1 ? n : DEFAULT_BACKUP_KEEP;
+  }
+
+  /** Whether starting a server may offer to back up + stop a running one to free
+   *  RAM (the start-guard "swap"). Defaults ON when unset. */
+  async getAutoStopOnStart(): Promise<boolean> {
+    return (await this.get(SettingKeys.AutoStopOnStart)) !== "false";
   }
 
   async set(key: string, value: string): Promise<void> {

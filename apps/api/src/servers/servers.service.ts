@@ -38,6 +38,7 @@ import { RconService } from "../rcon/rcon.service";
 import { StateMachineService } from "./state-machine.service";
 import { ManagerSettingsService, SettingKeys } from "../manager-settings/manager-settings.service";
 import { LogCaptureService, LOG_CAPTURE_MAX } from "../logs/log-capture.service";
+import { BackupsService } from "../backups/backups.service";
 import { buildContainerSpec } from "./runtime-spec";
 import { portsFor } from "../catalog/ports";
 import { LocalPaths } from "../common/paths";
@@ -140,6 +141,7 @@ export class ServersService implements OnApplicationBootstrap {
     private readonly sm: StateMachineService,
     private readonly settings: ManagerSettingsService,
     private readonly logCapture: LogCaptureService,
+    private readonly backups: BackupsService,
   ) {}
 
   /** The captured log / console for the current run (survives refresh + tab
@@ -596,9 +598,14 @@ export class ServersService implements OnApplicationBootstrap {
 
   async start(id: string, opts: { force?: boolean; stopFirst?: string } = {}): Promise<void> {
     if (opts.stopFirst && opts.stopFirst !== id) {
-      // Free the chosen server's RAM first, then start this one. stop() returns once
-      // teardown begins but holds the server's lock until it completes — await that
-      // so the RAM is actually reclaimed before we launch.
+      // Swap: back up the outgoing server, then stop it (freeing RAM), then start
+      // this one. The backup is best-effort — the graceful stop also saves the world
+      // — so a backup hiccup can't strand the swap. stop() returns once teardown
+      // begins but holds the server's lock until it completes; await that so the RAM
+      // is actually reclaimed before we launch.
+      await this.backups
+        .create(opts.stopFirst, "auto-stop")
+        .catch((e) => this.logger.warn(`auto-stop backup of ${opts.stopFirst} failed: ${(e as Error).message}`));
       await this.stop(opts.stopFirst).catch(() => undefined);
       await this.locks.get(opts.stopFirst)?.catch(() => undefined);
     } else if (!opts.force) {
@@ -630,6 +637,7 @@ export class ServersService implements OnApplicationBootstrap {
       availableMb,
       totalMb: host.memTotalMb,
       running,
+      autoStop: await this.settings.getAutoStopOnStart(),
     } satisfies InsufficientRamInfo);
   }
 
