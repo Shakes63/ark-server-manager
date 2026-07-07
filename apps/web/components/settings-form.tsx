@@ -146,6 +146,12 @@ const BEDROCK_GROUPS: SettingGroup[] = [
   { id: "world", label: "World", Icon: MapIcon, cats: ["World"] },
 ];
 
+// Valheim's small env-driven catalog → its own tabs.
+const VALHEIM_GROUPS: SettingGroup[] = [
+  { id: "world", label: "World", Icon: MapIcon, cats: ["World"] },
+  { id: "server", label: "Server", Icon: SlidersHorizontal, cats: ["Server"] },
+];
+
 /**
  * Map-specific categories → fragments of the server's map name they apply to.
  * A setting in one of these only shows when the managed server's map matches,
@@ -194,7 +200,9 @@ export function SettingsForm({
             ? ICARUS_GROUPS
             : game === Game.BEDROCK
               ? BEDROCK_GROUPS
-              : ARK_GROUPS;
+              : game === Game.VALHEIM
+                ? VALHEIM_GROUPS
+                : ARK_GROUPS;
   const MAPPED_CATS = new Set(GROUPS.flatMap((g) => g.cats));
 
   // A map-specific category is shown only when the server's map matches it.

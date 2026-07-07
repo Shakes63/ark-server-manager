@@ -27,6 +27,9 @@ export const IMAGES: Record<Game, string> = {
   // itzg/minecraft-bedrock-server — downloads Mojang's Bedrock server on boot, writes
   // server.properties from env. UDP (19132/19133). No RCON (console via stdin only).
   [Game.BEDROCK]: "itzg/minecraft-bedrock-server:latest",
+  // lloesche/valheim-server — installs the native Linux Valheim server via SteamCMD on
+  // boot; env-driven (SERVER_NAME/WORLD_NAME/SERVER_PASS…). UDP (2456/2457). No RCON.
+  [Game.VALHEIM]: "lloesche/valheim-server:latest",
 };
 
 /** POK keeps all instance data (install + saves + config) under this path. */
@@ -54,6 +57,12 @@ export const ICARUS_GAME_DIR = "/opt/icarus"; // SteamCMD-installed game files
 /** itzg bedrock keeps the server + config + worlds under /data (worlds at /data/worlds). */
 export const BEDROCK_DATA_DIR = "/data";
 
+/** Valheim (lloesche) splits data: config + worlds under /config (worlds at
+ *  /config/worlds_local), server files under /opt/valheim. Bound separately so
+ *  backups target the small worlds dir, not the game install. */
+export const VALHEIM_CONFIG_DIR = "/config";
+export const VALHEIM_GAME_DIR = "/opt/valheim";
+
 /**
  * The uid/gid each image runs the server as. Neither chowns its mounts fully
  * (POK never does; hermsi only chowns the volume root), so the manager makes the
@@ -67,6 +76,7 @@ export const SERVER_UID: Record<Game, number> = {
   [Game.MINECRAFT]: 1000, // itzg's default UID (overridable via UID/GID env)
   [Game.ICARUS]: 4711, // mornedhels default (overridable via PUID/PGID); unused — env-driven, no INI injection
   [Game.BEDROCK]: 1000, // itzg derives UID/GID from /data owner; we pass PUID/PGID. Unused here.
+  [Game.VALHEIM]: 0, // lloesche runs as root by default (we don't override PUID/PGID)
 };
 export const SERVER_GID: Record<Game, number> = {
   [Game.ASA]: 7777,
@@ -76,4 +86,5 @@ export const SERVER_GID: Record<Game, number> = {
   [Game.MINECRAFT]: 1000,
   [Game.ICARUS]: 4711,
   [Game.BEDROCK]: 1000,
+  [Game.VALHEIM]: 0,
 };

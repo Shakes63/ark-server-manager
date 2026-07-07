@@ -51,10 +51,17 @@ export const ICARUS_PORTS: PortSet = { game: 17777, rawSocket: 17778, query: 270
  */
 export const BEDROCK_PORTS: PortSet = { game: 19132, rawSocket: 19133, query: 19132, rcon: 0 };
 
+/**
+ * Valheim listens on UDP 2456 (game) + 2457 (Steam query, game+1); 2458 (game+2) is
+ * the crossplay backend port. No RCON. rawSocket carries 2458, rcon is 0.
+ */
+export const VALHEIM_PORTS: PortSet = { game: 2456, rawSocket: 2458, query: 2457, rcon: 0 };
+
 /** The fixed port block a new server gets, by game. */
 export function portsFor(game: Game): PortSet {
   if (game === Game.MINECRAFT) return MINECRAFT_PORTS;
   if (game === Game.ICARUS) return ICARUS_PORTS;
   if (game === Game.BEDROCK) return BEDROCK_PORTS;
+  if (game === Game.VALHEIM) return VALHEIM_PORTS;
   return FIXED_PORTS;
 }

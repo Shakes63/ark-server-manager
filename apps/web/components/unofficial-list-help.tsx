@@ -36,6 +36,7 @@ export function UnofficialListHelp({
   const minecraft = game === Game.MINECRAFT;
   const icarus = game === Game.ICARUS;
   const bedrock = game === Game.BEDROCK;
+  const valheim = game === Game.VALHEIM;
   const passwordHint = hasJoinPassword
     ? "your server has a join password"
     : "ON only if you set a join password";
@@ -52,7 +53,7 @@ export function UnofficialListHelp({
           <Search className="h-3.5 w-3.5" />
           {minecraft || bedrock
             ? "Add it to your Minecraft server list"
-            : conan || palworld || icarus
+            : conan || palworld || icarus || valheim
               ? "Find it in the in-game server browser"
               : "Find it on the in-game Unofficial list"}
         </span>
@@ -60,7 +61,20 @@ export function UnofficialListHelp({
       </button>
 
       {open &&
-        (bedrock ? (
+        (valheim ? (
+          <div className="space-y-1.5 border-t border-ark-border px-2.5 py-2 text-xs">
+            <p className="text-slate-400">
+              In <span className="text-slate-200">Join Game → Community</span>:
+            </p>
+            <FilterRow state="on" label="Search the community server list by name" />
+            <FilterRow state="on" label="Server is public" hint="enabled by default; turn off for friends-only" />
+            <p className="pt-1 leading-snug text-slate-400">
+              Search the name <span className="font-mono text-slate-200">{serverName}</span>, or use{" "}
+              <span className="text-slate-200">Join IP</span> (the address shown above). Valheim always needs the
+              password. It can take a minute to appear in the community list.
+            </p>
+          </div>
+        ) : bedrock ? (
           <div className="space-y-1.5 border-t border-ark-border px-2.5 py-2 text-xs">
             <p className="text-slate-400">
               Bedrock has no public browser — add the server by IP:

@@ -20,6 +20,8 @@ import {
   ICARUS_CONFIG_DIR,
   ICARUS_GAME_DIR,
   BEDROCK_DATA_DIR,
+  VALHEIM_CONFIG_DIR,
+  VALHEIM_GAME_DIR,
 } from "../common/images";
 import { ARK_NETWORK, containerName } from "../common/naming";
 import { loadEnv } from "../config/env";
@@ -54,6 +56,7 @@ export function buildContainerSpec(input: RuntimeSpecInput): Docker.ContainerCre
   if (input.game === Game.MINECRAFT) return buildMinecraftSpec(input);
   if (input.game === Game.ICARUS) return buildIcarusSpec(input);
   if (input.game === Game.BEDROCK) return buildBedrockSpec(input);
+  if (input.game === Game.VALHEIM) return buildValheimSpec(input);
   return buildAseSpec(input);
 }
 
@@ -708,6 +711,77 @@ function buildBedrockSpec(input: RuntimeSpecInput): Docker.ContainerCreateOption
 /** Bedrock settings -> itzg env vars. Booleans become true/false; empty strings are
  *  dropped so an unset LEVEL_SEED leaves the image's own default. */
 function bedrockCatalogEnv(input: RuntimeSpecInput): string[] {
+  const out: string[] = [];
+  for (const def of input.catalog.settings) {
+    if (def.target !== SettingTarget.Env) continue;
+    const raw = input.config.values?.[def.key] ?? def.default;
+    if (raw === undefined || raw === null || raw === "") continue;
+    const val = typeof raw === "boolean" ? (raw ? "true" : "false") : String(raw);
+    out.push(`${def.emitAs ?? def.key}=${val}`);
+  }
+  return out;
+}
+
+/**
+ * Valheim (lloesche/valheim-server): env-driven, native Linux. The image installs the
+ * server via SteamCMD on boot and builds its launch line from these env vars. UDP on
+ * 2456 (game) + 2457 (query) + 2458 (crossplay); NO RCON. It runs as root by default
+ * (we don't set PUID/PGID), so the root-owned instance binds work without a chown.
+ * Valheim REQUIRES a join password of >= 5 chars (validated at create).
+ */
+function buildValheimSpec(input: RuntimeSpecInput): Docker.ContainerCreateOptions {
+  const env = loadEnv();
+  const { ports } = input;
+
+  const valheimEnv = [
+    `TZ=${input.timezone || env.TZ}`,
+    `SERVER_NAME=${input.sessionName}`,
+    `SERVER_PASS=${serverPassword(input)}`, // >= 5 chars, enforced at create
+    `SERVER_PORT=${ports.game}`, // query is game+1 (2457), crossplay is game+2 (2458)
+    ...valheimCatalogEnv(input),
+  ];
+
+  // Config + worlds under /config; the SteamCMD game install under /opt/valheim.
+  const root = HostPaths.instanceRoot(input.serverId);
+  const binds = [`${root}/config:${VALHEIM_CONFIG_DIR}`, `${root}/gamefiles:${VALHEIM_GAME_DIR}`];
+
+  const hostNet = env.GAME_HOST_NETWORK;
+  return {
+    name: containerName(input.serverId, input.game, input.sessionName),
+    Image: IMAGES[Game.VALHEIM],
+    Hostname: containerName(input.serverId, input.game, input.sessionName),
+    Env: valheimEnv,
+    Labels: serverLabels(input, env.PUBLIC_BASE_URL),
+    ...(hostNet
+      ? {}
+      : {
+          ExposedPorts: {
+            [portKey(ports.game, "udp")]: {},
+            [portKey(ports.query, "udp")]: {},
+            [portKey(ports.rawSocket, "udp")]: {},
+          },
+        }),
+    HostConfig: {
+      Binds: binds,
+      ...(hostNet
+        ? { NetworkMode: "host" }
+        : {
+            PortBindings: {
+              [portKey(ports.game, "udp")]: [{ HostPort: String(ports.game) }],
+              [portKey(ports.query, "udp")]: [{ HostPort: String(ports.query) }],
+              [portKey(ports.rawSocket, "udp")]: [{ HostPort: String(ports.rawSocket) }],
+            },
+          }),
+      RestartPolicy: { Name: "no" }, // manager watchdog owns restarts
+      Memory: input.ramLimitMb ? input.ramLimitMb * 1024 * 1024 : undefined,
+      NanoCpus: input.cpuLimit ? Math.round(input.cpuLimit * 1e9) : undefined,
+    },
+    ...(hostNet ? {} : { NetworkingConfig: { EndpointsConfig: { [ARK_NETWORK]: {} } } }),
+  };
+}
+
+/** Valheim settings -> lloesche env vars. Booleans become true/false; empty dropped. */
+function valheimCatalogEnv(input: RuntimeSpecInput): string[] {
   const out: string[] = [];
   for (const def of input.catalog.settings) {
     if (def.target !== SettingTarget.Env) continue;

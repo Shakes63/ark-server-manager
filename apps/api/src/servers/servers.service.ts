@@ -102,6 +102,9 @@ export const READY_RE_BY_GAME: Record<Game, RegExp> = {
   // Bedrock's dedicated server prints "Server started." once it's up (no RCON to
   // lean on). PROVISIONAL — confirm against a real boot.
   [Game.BEDROCK]: /Server started\./i,
+  // Valheim logs "Game server connected" when it registers + is joinable (no RCON).
+  // PROVISIONAL — confirm against a real boot.
+  [Game.VALHEIM]: /Game server connected/i,
 };
 
 /** The "server is now joinable" log-marker regex for a game. */
@@ -354,6 +357,10 @@ export class ServersService implements OnApplicationBootstrap {
 
   async create(dto: CreateServerDto): Promise<ServerSummary> {
     if (!Object.values(Game).includes(dto.game)) throw new BadRequestException("Invalid game");
+    // Valheim's server refuses to boot without a join password of >= 5 characters.
+    if (dto.game === Game.VALHEIM && (dto.serverPassword ?? "").length < 5) {
+      throw new BadRequestException("Valheim requires a server password of at least 5 characters.");
+    }
     // Every server of a given family shares one fixed port block so a single set of
     // port-forwards covers whichever is running — only one runs at a time, so the
     // shared ports never actually collide. Minecraft uses its own TCP block (25565).
@@ -848,10 +855,10 @@ export class ServersService implements OnApplicationBootstrap {
     // Conan persists to SQLite and Minecraft never logs ARK's "World Save Complete"
     // — issue their save (save-all for Minecraft, via the game-aware wrapper) and
     // return; the container's SIGTERM handler flushes the rest on shutdown. Waiting
-    // for the ARK log here would just burn the timeout. Icarus and Bedrock have NO
-    // RCON at all — they autosave and flush on the container's graceful shutdown, so
-    // there's nothing to issue; just return and let SIGTERM handle it.
-    if (game === Game.ICARUS || game === Game.BEDROCK) return;
+    // for the ARK log here would just burn the timeout. Icarus, Bedrock and Valheim
+    // have NO RCON at all — they autosave and flush on the container's graceful
+    // shutdown, so there's nothing to issue; just return and let SIGTERM handle it.
+    if (game === Game.ICARUS || game === Game.BEDROCK || game === Game.VALHEIM) return;
     if (!containerId || game === Game.CONAN || game === Game.MINECRAFT) {
       await this.rcon.saveWorld(id).catch(() => undefined);
       return;
@@ -990,10 +997,16 @@ export class ServersService implements OnApplicationBootstrap {
     if (!server) return;
     const env = loadEnv();
     const game = server.game as Game;
-    // Env-driven images build their own config: Minecraft (itzg) + Bedrock write
-    // server.properties, Icarus (mornedhels) writes ServerSettings.ini — none have
-    // ARK-style INI files for us to render. Nothing to write.
-    if (game === Game.MINECRAFT || game === Game.ICARUS || game === Game.BEDROCK) return;
+    // Env-driven images build their own config (Minecraft/Bedrock → server.properties,
+    // Icarus → ServerSettings.ini, Valheim → launch args) — none have ARK-style INI
+    // files for us to render. Nothing to write.
+    if (
+      game === Game.MINECRAFT ||
+      game === Game.ICARUS ||
+      game === Game.BEDROCK ||
+      game === Game.VALHEIM
+    )
+      return;
     const base = join(env.DATA_DIR, "instances", server.id);
     // Both images bind the instance dir as their data root. ASA (POK) installs
     // at the root → config under ShooterGame/Saved/Config/WindowsServer; ASE

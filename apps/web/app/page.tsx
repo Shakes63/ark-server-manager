@@ -15,6 +15,7 @@ import {
   MINECRAFT_OFFICIAL_MAPS,
   ICARUS_OFFICIAL_MAPS,
   BEDROCK_OFFICIAL_MAPS,
+  VALHEIM_OFFICIAL_MAPS,
   GAME_LABELS,
   mapLabel,
   type ServerSummary,
@@ -251,6 +252,7 @@ const MAPS_FOR: Record<Game, readonly string[]> = {
   [Game.MINECRAFT]: MINECRAFT_OFFICIAL_MAPS,
   [Game.ICARUS]: ICARUS_OFFICIAL_MAPS,
   [Game.BEDROCK]: BEDROCK_OFFICIAL_MAPS,
+  [Game.VALHEIM]: VALHEIM_OFFICIAL_MAPS,
 };
 
 function CreateServerForm({ onDone }: { onDone: () => void }) {

@@ -7,6 +7,7 @@ import { PALWORLD_CATALOG } from "./palworld.catalog";
 import { MINECRAFT_CATALOG } from "./minecraft.catalog";
 import { ICARUS_CATALOG } from "./icarus.catalog";
 import { BEDROCK_CATALOG } from "./bedrock.catalog";
+import { VALHEIM_CATALOG } from "./valheim.catalog";
 import { serializeGameIni, serializeGameUserSettings } from "./ini-serializer";
 
 @Injectable()
@@ -19,6 +20,7 @@ export class CatalogService {
     if (game === Game.MINECRAFT) return MINECRAFT_CATALOG;
     if (game === Game.ICARUS) return ICARUS_CATALOG;
     if (game === Game.BEDROCK) return BEDROCK_CATALOG;
+    if (game === Game.VALHEIM) return VALHEIM_CATALOG;
     throw new NotFoundException(`Unknown game: ${game}`);
   }
 

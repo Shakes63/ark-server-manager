@@ -14,6 +14,8 @@ export enum Game {
   ICARUS = "ICARUS",
   /** Minecraft (Bedrock) — itzg bedrock image, env-driven; UDP; NO network RCON. */
   BEDROCK = "BEDROCK",
+  /** Valheim — lloesche image (native Linux SteamCMD), env-driven; UDP; NO RCON. */
+  VALHEIM = "VALHEIM",
 }
 
 /** Friendly game names for the UI. */
@@ -25,6 +27,7 @@ export const GAME_LABELS: Record<Game, string> = {
   [Game.MINECRAFT]: "Minecraft (Java)",
   [Game.ICARUS]: "Icarus",
   [Game.BEDROCK]: "Minecraft (Bedrock)",
+  [Game.VALHEIM]: "Valheim",
 };
 
 /** SteamCMD app IDs for the dedicated server (anonymous login). */
@@ -41,6 +44,8 @@ export const STEAM_APP_ID: Record<Game, number> = {
   [Game.ICARUS]: 2089300,
   // Bedrock isn't on Steam — the itzg image downloads Mojang's Bedrock server. Unused.
   [Game.BEDROCK]: 0,
+  // Valheim dedicated server (the lloesche image installs it via SteamCMD on boot).
+  [Game.VALHEIM]: 896660,
 };
 
 /** Steam Workshop "consumer" app ids for mod downloads (ARK: Survival Evolved /
@@ -73,6 +78,7 @@ export const GAME_ICONS: Record<Game, string> = {
   // Same Minecraft logo as the Java edition (cosmetic; a 404 just falls back).
   [Game.BEDROCK]:
     "https://upload.wikimedia.org/wikipedia/commons/thumb/8/85/Minecraft_2024_logo.svg/512px-Minecraft_2024_logo.svg.png",
+  [Game.VALHEIM]: "https://cdn.cloudflare.steamstatic.com/steam/apps/892970/header.jpg",
 };
 
 /** CurseForge numeric game id for ASA (used by the mod browser). */
@@ -111,6 +117,8 @@ export const RAM_ESTIMATE_MB: Record<Game, number> = {
   [Game.ICARUS]: 12000,
   // Bedrock is a lightweight native server (~1-2 GB even populated).
   [Game.BEDROCK]: 2000,
+  // Valheim is light — ~2-4 GB for a populated world.
+  [Game.VALHEIM]: 3000,
 };
 
 /** Default port offsets within a per-server allocation block. */
@@ -182,6 +190,9 @@ export const ICARUS_OFFICIAL_MAPS = ["Prospect"] as const;
  *  (itzg's LEVEL_TYPE — Bedrock uses these bare keywords, not the namespaced ids). */
 export const BEDROCK_OFFICIAL_MAPS = ["DEFAULT", "FLAT", "LEGACY"] as const;
 
+/** Valheim has a single procedurally-generated world (from a seed) — no map choice. */
+export const VALHEIM_OFFICIAL_MAPS = ["Valheim"] as const;
+
 /** Friendly display names for known level names (raw level → label). */
 export const MAP_LABELS: Record<string, string> = {
   // Conan Exiles
@@ -199,6 +210,8 @@ export const MAP_LABELS: Record<string, string> = {
   DEFAULT: "Default",
   FLAT: "Flat",
   LEGACY: "Legacy (small finite world)",
+  // Valheim (single procedural world)
+  Valheim: "Procedural world",
   // ASA (World Partition — *_WP)
   TheIsland_WP: "The Island",
   TheCenter_WP: "The Center",

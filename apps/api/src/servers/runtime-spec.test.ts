@@ -355,3 +355,48 @@ describe("buildContainerSpec (Bedrock / itzg)", () => {
     expect(env.some((e) => e.startsWith("LEVEL_SEED="))).toBe(false);
   });
 });
+
+async function buildValheim(config: ServerConfigValues) {
+  const { buildContainerSpec } = await import("./runtime-spec");
+  const { VALHEIM_CATALOG } = await import("../catalog/valheim.catalog");
+  return buildContainerSpec({
+    serverId: "srv1",
+    game: Game.VALHEIM,
+    map: "Valheim",
+    sessionName: "My Valheim Server",
+    ports: { game: 2456, rawSocket: 2458, query: 2457, rcon: 0 },
+    maxPlayers: 10,
+    adminPassword: "secret",
+    serverPassword: "hunter2",
+    modIds: [],
+    cluster: null,
+    config,
+    catalog: VALHEIM_CATALOG,
+  });
+}
+
+describe("buildContainerSpec (Valheim / lloesche)", () => {
+  it("maps the config to the lloesche env contract (3 UDP ports, no RCON)", async () => {
+    const spec = await buildValheim({ values: {} });
+    expect(spec.Image).toBe("lloesche/valheim-server:latest");
+    const env = envOf(spec);
+    expect(env).toContain("SERVER_NAME=My Valheim Server");
+    expect(env).toContain("SERVER_PASS=hunter2"); // the join password (>= 5 chars)
+    expect(env).toContain("SERVER_PORT=2456");
+    expect(env).toContain("WORLD_NAME=Dedicated");
+    // game + query + crossplay are UDP; no RCON/TCP
+    expect(spec.HostConfig?.PortBindings?.["2456/udp"]).toEqual([{ HostPort: "2456" }]);
+    expect(spec.HostConfig?.PortBindings?.["2457/udp"]).toEqual([{ HostPort: "2457" }]);
+    expect(Object.keys(spec.HostConfig?.PortBindings ?? {}).some((k) => k.endsWith("/tcp"))).toBe(false);
+    // config + worlds and the game install bound separately
+    const binds = spec.HostConfig?.Binds ?? [];
+    expect(binds.some((b) => b.endsWith(":/config"))).toBe(true);
+    expect(binds.some((b) => b.endsWith(":/opt/valheim"))).toBe(true);
+  });
+
+  it("passes catalog settings through (bools as true/false)", async () => {
+    const env = envOf(await buildValheim({ values: { SERVER_PUBLIC: false, CROSSPLAY: true } }));
+    expect(env).toContain("SERVER_PUBLIC=false");
+    expect(env).toContain("CROSSPLAY=true");
+  });
+});

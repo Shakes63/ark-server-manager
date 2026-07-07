@@ -133,11 +133,14 @@ export default function ServerDetailPage({ params }: { params: Promise<{ id: str
     pending === "install" || st === ServerState.Installing || st === ServerState.Updating;
 
   // No-RCON games hide the Console tab. Icarus + Bedrock keep an uploader Mods tab
-  // (.pak files / add-on packs — neither game has a browsable catalog).
+  // (.pak files / add-on packs); Valheim's mods are settings toggles (BepInEx/
+  // ValheimPlus), so it hides Mods too.
   const hiddenTabs =
     server.game === Game.ICARUS || server.game === Game.BEDROCK
       ? new Set<Tab>(["Console"])
-      : new Set<Tab>();
+      : server.game === Game.VALHEIM
+        ? new Set<Tab>(["Console", "Mods"])
+        : new Set<Tab>();
   const visibleTabs = TABS.filter((t) => !hiddenTabs.has(t));
 
   return (
@@ -254,9 +257,10 @@ function Overview({ server, onChanged }: { server: ServerSummary; onChanged: () 
   const isMc = server.game === Game.MINECRAFT;
   const isIcarus = server.game === Game.ICARUS;
   const isBedrock = server.game === Game.BEDROCK;
-  const noQuery = isMc || isBedrock;
-  const noRcon = isIcarus || isBedrock;
-  const noMods = isIcarus || isBedrock;
+  const isValheim = server.game === Game.VALHEIM;
+  const noQuery = isMc || isBedrock; // Valheim has a real query port (2457)
+  const noRcon = isIcarus || isBedrock || isValheim;
+  const noMods = isIcarus || isBedrock || isValheim;
   const row = (k: string, v: string): [string, string] => [k, v];
   const rows: [string, string][] = [
     row("Game", server.game),
