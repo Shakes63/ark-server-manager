@@ -1,14 +1,17 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Globe, Check, X, Loader2, ArrowUpRight } from "lucide-react";
-import { apiGet, apiPost } from "@/lib/api";
+import { Globe, Check, X, Loader2, ArrowUpRight, Power, Trash2, TriangleAlert } from "lucide-react";
+import { apiGet, apiPost, apiPatch, apiDelete } from "@/lib/api";
 
+type ForwardState = "ok" | "disabled" | "mismatched" | "missing";
 interface ForwardStatus {
   port: number;
   proto: "udp" | "tcp";
   label: string;
-  present: boolean;
+  state: ForwardState;
+  ruleId: number | null;
+  actualTarget?: string | null;
 }
 interface View {
   configured: boolean;
@@ -17,13 +20,14 @@ interface View {
 }
 
 /**
- * WAN port-forward status for this server's player-facing ports, with a one-click
- * "Forward ports" that creates the missing pfSense NAT rules (auto pass rules) and
- * applies them. Needs the pfSense host + API key + target IP in Settings.
+ * Full WAN port-forward management for this server's player-facing ports:
+ * per-forward state (ok / disabled / wrong target / missing), one-click
+ * create-and-fix, per-forward enable/disable and delete — all against the pfSense
+ * REST API (host + key + target IP in Settings).
  */
 export function PortForwardsCard({ serverId }: { serverId: string }) {
   const [view, setView] = useState<View | null>(null);
-  const [applying, setApplying] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null); // "apply" | "<port>/<proto>"
   const [err, setErr] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
@@ -33,20 +37,49 @@ export function PortForwardsCard({ serverId }: { serverId: string }) {
   }, [serverId]);
   useEffect(() => refresh(), [refresh]);
 
-  const apply = async () => {
-    setApplying(true);
+  const run = async (key: string, fn: () => Promise<View>) => {
+    setBusy(key);
     setErr(null);
     try {
-      setView(await apiPost<View>(`/servers/${serverId}/portforwards`));
+      setView(await fn());
     } catch (e) {
       setErr((e as Error).message);
     } finally {
-      setApplying(false);
+      setBusy(null);
     }
   };
 
   if (!view) return null;
-  const missing = view.forwards.filter((f) => !f.present).length;
+  const fixable = view.forwards.filter((f) => f.state === "missing" || f.state === "mismatched").length;
+
+  const stateChip = (f: ForwardStatus) => {
+    switch (f.state) {
+      case "ok":
+        return (
+          <span className="inline-flex items-center gap-1 text-xs text-ark-accent">
+            <Check className="h-3.5 w-3.5" /> forwarded
+          </span>
+        );
+      case "disabled":
+        return (
+          <span className="inline-flex items-center gap-1 text-xs text-slate-500">
+            <Power className="h-3.5 w-3.5" /> disabled
+          </span>
+        );
+      case "mismatched":
+        return (
+          <span className="inline-flex items-center gap-1 text-xs text-amber-400" title={`Currently → ${f.actualTarget}`}>
+            <TriangleAlert className="h-3.5 w-3.5" /> wrong target ({f.actualTarget})
+          </span>
+        );
+      default:
+        return (
+          <span className="inline-flex items-center gap-1 text-xs text-rose-400">
+            <X className="h-3.5 w-3.5" /> not forwarded
+          </span>
+        );
+    }
+  };
 
   return (
     <div className="card space-y-3">
@@ -57,10 +90,10 @@ export function PortForwardsCard({ serverId }: { serverId: string }) {
             Port forwarding (pfSense)
           </h3>
         </div>
-        {view.configured && missing > 0 && (
-          <button className="btn-primary" onClick={apply} disabled={applying}>
-            {applying ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUpRight className="h-4 w-4" />}
-            {applying ? "Applying…" : `Forward ${missing} port${missing === 1 ? "" : "s"}`}
+        {view.configured && fixable > 0 && (
+          <button className="btn-primary" onClick={() => run("apply", () => apiPost<View>(`/servers/${serverId}/portforwards`))} disabled={busy !== null}>
+            {busy === "apply" ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUpRight className="h-4 w-4" />}
+            {busy === "apply" ? "Applying…" : `Fix ${fixable} forward${fixable === 1 ? "" : "s"}`}
           </button>
         )}
       </div>
@@ -71,29 +104,64 @@ export function PortForwardsCard({ serverId }: { serverId: string }) {
           <Link href="/settings" className="text-ark-accent hover:underline">
             Settings
           </Link>{" "}
-          to check and create WAN forwards from here.
+          to manage WAN forwards from here.
         </p>
       ) : (
         <>
-          <ul className="space-y-1 text-sm">
-            {view.forwards.map((f) => (
-              <li key={`${f.port}/${f.proto}`} className="flex items-center gap-2">
-                {f.present ? (
-                  <Check className="h-3.5 w-3.5 shrink-0 text-ark-accent" />
-                ) : (
-                  <X className="h-3.5 w-3.5 shrink-0 text-rose-400" />
-                )}
-                <span className="font-mono text-slate-200">
-                  {f.port}/{f.proto}
-                </span>
-                <span className="text-xs text-slate-500">{f.label}</span>
-                {!f.present && <span className="text-xs text-rose-400">not forwarded</span>}
-              </li>
-            ))}
+          <ul className="divide-y divide-ark-border/50">
+            {view.forwards.map((f) => {
+              const key = `${f.port}/${f.proto}`;
+              const rowBusy = busy === key;
+              return (
+                <li key={key} className="flex items-center gap-2 py-1.5">
+                  <span className="w-24 shrink-0 font-mono text-sm text-slate-200">{key}</span>
+                  <span className="w-40 shrink-0 truncate text-xs text-slate-500">{f.label}</span>
+                  <span className="min-w-0 flex-1">{stateChip(f)}</span>
+                  {rowBusy ? (
+                    <Loader2 className="h-4 w-4 shrink-0 animate-spin text-slate-500" />
+                  ) : (
+                    f.ruleId != null && (
+                      <span className="flex shrink-0 items-center gap-1">
+                        <button
+                          className="text-slate-500 hover:text-slate-200"
+                          title={f.state === "disabled" ? "Enable this forward" : "Disable this forward (rule kept)"}
+                          disabled={busy !== null}
+                          onClick={() =>
+                            run(key, () =>
+                              apiPatch<View>(`/servers/${serverId}/portforwards`, {
+                                port: f.port,
+                                proto: f.proto,
+                                enabled: f.state === "disabled",
+                              }),
+                            )
+                          }
+                        >
+                          <Power className="h-4 w-4" />
+                        </button>
+                        <button
+                          className="text-slate-500 hover:text-rose-400"
+                          title="Delete this forward from pfSense"
+                          disabled={busy !== null}
+                          onClick={() =>
+                            run(key, () =>
+                              apiDelete<View>(
+                                `/servers/${serverId}/portforwards?port=${f.port}&proto=${f.proto}`,
+                              ),
+                            )
+                          }
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </span>
+                    )
+                  )}
+                </li>
+              );
+            })}
           </ul>
           <p className="text-[11px] text-slate-500">
             WAN → {view.targetIp}. Admin ports (RCON/telnet) are deliberately never forwarded.
-            {missing === 0 && " All player-facing ports are forwarded."}
+            {fixable === 0 && " All player-facing ports are forwarded."}
           </p>
         </>
       )}

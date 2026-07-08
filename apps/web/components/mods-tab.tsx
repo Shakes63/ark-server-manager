@@ -236,7 +236,10 @@ export function ModsTab({ serverId, game }: { serverId: string; game: Game }) {
 
       {view === "installed" && (
         <div className="space-y-3">
-          <p className="text-xs text-slate-500">Load order — mods are applied top-first.</p>
+          <p className="text-xs text-slate-500">
+            Load order — mods are applied top-first. Mods here aren&apos;t pinned to a version — the game
+            image downloads/updates every listed mod to its latest release on each server start.
+          </p>
           {installed.length === 0 && (
             <div className="card text-slate-400">
               No mods installed yet — add some from the {browserName} browser, or by ID below.

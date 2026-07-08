@@ -117,6 +117,23 @@ export class CurseForgeService {
     }
   }
 
+  /** The project's current main (latest) file — for modpack update checks.
+   *  Returns null when the lookup fails (never blocks on a CF hiccup). */
+  async latestFile(projectId: number): Promise<{ id: number; name: string | null } | null> {
+    try {
+      const body = await this.request<{ data: CfMod }>(`/v1/mods/${projectId}`);
+      const id = body.data.mainFileId;
+      if (!id) return null;
+      const name =
+        (body.data.latestFiles ?? []).find((f) => f.id === id)?.displayName ??
+        body.data.latestFiles?.[0]?.displayName ??
+        null;
+      return { id, name };
+    } catch {
+      return null;
+    }
+  }
+
   /** Mod categories for the game (for the browser's category filter). */
   async categories(gameId: number = ASA_CURSEFORGE_GAME_ID): Promise<ModCategory[]> {
     const body = await this.request<{
@@ -142,7 +159,8 @@ interface CfMod {
   isFeatured?: boolean;
   allowModDistribution?: boolean;
   categories?: Array<{ name: string }>;
-  latestFiles?: Array<{ displayName?: string; fileLength?: number }>;
+  mainFileId?: number;
+  latestFiles?: Array<{ id?: number; displayName?: string; fileLength?: number }>;
   screenshots?: Array<{ url?: string }>;
 }
 

@@ -116,13 +116,42 @@ export class ModsService {
     const values = (JSON.parse(server.configJson) as ServerConfigValues).values ?? {};
     const slug = values["_mcModpackSlug"];
     if (typeof slug !== "string" || !slug) return null;
-    return {
+    const pack: MinecraftModpack = {
       projectId: Number(values["_mcModpackProjectId"]) || 0,
       slug,
       name: typeof values["_mcModpackName"] === "string" ? values["_mcModpackName"] : slug,
       thumbnailUrl: typeof values["_mcModpackThumb"] === "string" ? values["_mcModpackThumb"] : null,
       fileId: values["_mcModpackFileId"] != null ? Number(values["_mcModpackFileId"]) : null,
     };
+    // Update check only matters for PINNED packs (unpinned ones follow the latest
+    // release automatically on each start). Best-effort — a CF hiccup returns the
+    // pack without update info rather than failing the tab.
+    if (pack.fileId && pack.projectId) {
+      const latest = await this.curseforge.latestFile(pack.projectId);
+      pack.latestFileId = latest?.id ?? null;
+      pack.latestFileName = latest?.name ?? null;
+      pack.updateAvailable = Boolean(latest && latest.id !== pack.fileId);
+    }
+    return pack;
+  }
+
+  /** Re-pin the modpack to CurseForge's current main file (one-click update).
+   *  The image re-resolves the pack on the next start. */
+  async updateMinecraftModpack(serverId: string): Promise<MinecraftModpack> {
+    const server = await this.prisma.server.findUnique({ where: { id: serverId } });
+    if (!server) throw new NotFoundException("Server not found");
+    const pack = await this.getMinecraftModpack(serverId);
+    if (!pack) throw new BadRequestException("No modpack installed");
+    if (!pack.fileId) return pack; // unpinned — already follows the latest
+    const latest = await this.curseforge.latestFile(pack.projectId);
+    if (!latest) throw new BadRequestException("Could not fetch the latest pack version from CurseForge");
+    await this.writeModpackValues(server.id, server.configJson, { _mcModpackFileId: latest.id });
+    await this.events.emit({
+      type: EventType.ConfigChanged,
+      message: `Modpack updated to ${latest.name ?? `file ${latest.id}`}`,
+      serverId,
+    });
+    return (await this.getMinecraftModpack(serverId))!;
   }
 
   /** Install a modpack: persist it + flag a restart. itzg downloads it on next start. */

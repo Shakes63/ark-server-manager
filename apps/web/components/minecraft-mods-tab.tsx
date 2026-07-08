@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Boxes, Search, Download, Trash2, Loader2, Info, ExternalLink } from "lucide-react";
 import { Game, type ModSearchResult, type MinecraftModpack } from "@ark/shared";
-import { apiGet, apiPut, apiDelete, ApiError } from "@/lib/api";
+import { apiGet, apiPost, apiPut, apiDelete, ApiError } from "@/lib/api";
 
 const fmt = (n: number) =>
   n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n / 1_000).toFixed(1)}k` : String(n);
@@ -17,7 +17,7 @@ export function MinecraftModsTab({ serverId }: { serverId: string }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<ModSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
-  const [busyId, setBusyId] = useState<number | "clear" | null>(null);
+  const [busyId, setBusyId] = useState<number | "clear" | "update" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const loadCurrent = useCallback(() => {
@@ -84,6 +84,18 @@ export function MinecraftModsTab({ serverId }: { serverId: string }) {
     }
   };
 
+  const updatePack = async () => {
+    setBusyId("update");
+    setError(null);
+    try {
+      setCurrent(await apiPost<MinecraftModpack>(`/servers/${serverId}/minecraft/modpack/update`));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="card space-y-3">
@@ -107,9 +119,25 @@ export function MinecraftModsTab({ serverId }: { serverId: string }) {
                 </span>
               </div>
               <div className="text-xs text-slate-500">
-                Installs on next start · restart to apply changes.
+                {current.fileId
+                  ? "Pinned to a specific pack version · installs on next start."
+                  : "Follows the latest pack release automatically on each start."}
               </div>
+              {current.updateAvailable && (
+                <div className="mt-1 text-xs font-medium text-amber-400">
+                  Newer version available{current.latestFileName ? `: ${current.latestFileName}` : ""}
+                </div>
+              )}
             </div>
+            {current.updateAvailable && (
+              <button
+                className="shrink-0 rounded-full bg-amber-500/15 px-2.5 py-1 text-xs font-medium text-amber-300 hover:bg-amber-500/25 disabled:opacity-50"
+                onClick={updatePack}
+                disabled={busyId !== null}
+              >
+                {busyId === "update" ? "Updating…" : "Update pack"}
+              </button>
+            )}
             <button className="btn-secondary shrink-0" onClick={clear} disabled={busyId !== null}>
               {busyId === "clear" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}{" "}
               Remove

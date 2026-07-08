@@ -151,6 +151,12 @@ export class ModsController {
     });
   }
 
+  /** Re-pin the modpack to CurseForge's current main file (one-click update). */
+  @Post("servers/:id/minecraft/modpack/update")
+  updateModpack(@Param("id") id: string) {
+    return this.mods.updateMinecraftModpack(id);
+  }
+
   /** Clear the modpack — the server reverts to the configured vanilla/flavour type. */
   @Delete("servers/:id/minecraft/modpack")
   clearModpack(@Param("id") id: string) {

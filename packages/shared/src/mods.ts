@@ -53,4 +53,9 @@ export interface MinecraftModpack {
   thumbnailUrl: string | null;
   /** Pinned file (version) id, or null to let the image install the latest. */
   fileId: number | null;
+  /** Update check (filled on GET when the pack is pinned): CurseForge's current
+   *  main file vs the pinned one. */
+  latestFileId?: number | null;
+  latestFileName?: string | null;
+  updateAvailable?: boolean;
 }
