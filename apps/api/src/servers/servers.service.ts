@@ -120,9 +120,10 @@ export const READY_RE_BY_GAME: Record<Game, RegExp> = {
   // V Rising logs this once the server registers with Steam and is joinable.
   // CONFIRMED live: "PlatformSystemBase - Server connected to Steam successfully!".
   [Game.VRISING]: /Server connected to Steam successfully/i,
-  // Sons of the Forest logs its lobby/session registration once joinable.
-  // PROVISIONAL — confirm against a real boot.
-  [Game.SOTF]: /Session is advertised|accepting connections|GameServer(Online| started)/i,
+  // Sons of the Forest: "#DSL Dedicated server loaded." fires once the world has
+  // loaded and the server idles waiting for players — CONFIRMED live. (The earlier
+  // "Starting server..." line fires ~2 min before, mid world-load.)
+  [Game.SOTF]: /Dedicated server loaded/i,
   // Satisfactory: the wolveix wrapper + Unreal log this region once the API/game
   // ports are serving. PROVISIONAL — confirm against a real boot.
   [Game.SATISFACTORY]: /Engine is initialized\. Leaving FEngineLoop::Init|Satisfactory Server is now running/i,
