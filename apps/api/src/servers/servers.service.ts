@@ -124,8 +124,9 @@ export const READY_RE_BY_GAME: Record<Game, RegExp> = {
   // loaded and the server idles waiting for players — CONFIRMED live. (The earlier
   // "Starting server..." line fires ~2 min before, mid world-load.)
   [Game.SOTF]: /Dedicated server loaded/i,
-  // Satisfactory: the wolveix wrapper + Unreal log this region once the API/game
-  // ports are serving. PROVISIONAL — confirm against a real boot.
+  // Satisfactory: Unreal's "Engine is initialized. Leaving FEngineLoop::Init()"
+  // fires right as the game port starts listening — CONFIRMED live (the API
+  // claim + query follow within seconds).
   [Game.SATISFACTORY]: /Engine is initialized\. Leaving FEngineLoop::Init|Satisfactory Server is now running/i,
 };
 

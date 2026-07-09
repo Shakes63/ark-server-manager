@@ -10,7 +10,7 @@ container spawns and supervises a container per game server, manages every
 setting through schema-driven forms, and handles mods, backups, schedules,
 player administration, and even your router's port-forwards.
 
-**Supported games (10):**
+**Supported games (14):**
 
 | Game | Runtime | Console | Mods |
 |---|---|---|---|
@@ -24,6 +24,10 @@ player administration, and even your router's port-forwards.
 | Valheim | native (lloesche) | — | Thunderstore browser (auto-deps) |
 | 7 Days to Die | native (LinuxGSM) | telnet (in-app) | mod-zip uploader |
 | Enshrouded | Proton | — | — (game has no mod support) |
+| Project Zomboid | native (Java) | RCON | Steam Workshop browser (auto Mod-ID) |
+| V Rising | Wine | RCON (announce) | — (game has no official mod support) |
+| Sons of the Forest | Wine | — | — (game has no official mod support) |
+| Satisfactory | native | — (HTTPS API: auto-claim) | — (SFTP per upstream docs) |
 
 **Feature highlights**
 
@@ -83,7 +87,7 @@ manager injects config, watches logs, and talks RCON/telnet/query protocols.
   echo "JWT_SECRET=$(openssl rand -hex 32)"
   ```
 
-- For the Wine/Proton games (Icarus, Enshrouded), the **host** needs a larger
+- For the Wine/Proton games (Icarus, Enshrouded, V Rising, Sons of the Forest), the **host** needs a larger
   mmap limit or the server crashes on boot:
 
   ```bash
@@ -252,6 +256,10 @@ wouldn't exist without them:
 | Enshrouded | `mornedhels/enshrouded-server` | [mornedhels](https://github.com/mornedhels/enshrouded-server) |
 | Valheim | `lloesche/valheim-server` | [lloesche / community-valheim-tools](https://github.com/community-valheim-tools/valheim-server-docker) |
 | 7 Days to Die | `vinanrra/7dtd-server` | [vinanrra](https://github.com/vinanrra/Docker-7DaysToDie) (built on [LinuxGSM](https://linuxgsm.com/)) |
+| Project Zomboid | `danixu86/project-zomboid-dedicated-server` | [Danixu](https://github.com/Danixu/project-zomboid-server-docker) |
+| V Rising | `trueosiris/vrising` | [TrueOsiris](https://github.com/TrueOsiris/docker-vrising) |
+| Sons of the Forest | `jammsen/sons-of-the-forest-dedicated-server` | [jammsen](https://github.com/jammsen/docker-sons-of-the-forest-dedicated-server) |
+| Satisfactory | `wolveix/satisfactory-server` | [wolveix](https://github.com/wolveix/satisfactory-server) |
 
 Also standing on: [SteamCMD](https://developer.valvesoftware.com/wiki/SteamCMD),
 GE-Proton/Wine for the Windows-only servers,
