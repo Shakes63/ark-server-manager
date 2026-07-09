@@ -6,7 +6,7 @@ import {
   NotFoundException,
   type OnApplicationBootstrap,
 } from "@nestjs/common";
-import { mkdir, writeFile, rm, cp, chmod, chown, stat } from "node:fs/promises";
+import { mkdir, writeFile, rm, cp, chmod, chown, stat, readFile } from "node:fs/promises";
 import { execFile, spawn } from "node:child_process";
 import type { Readable } from "node:stream";
 import { join, dirname, relative, sep } from "node:path";
@@ -1188,17 +1188,55 @@ export class ServersService implements OnApplicationBootstrap {
     const env = loadEnv();
     const game = server.game as Game;
     // Env-driven images build their own config (Minecraft/Bedrock → server.properties,
-    // Icarus → ServerSettings.ini, Valheim → launch args, Enshrouded → enshrouded_server.json,
-    // Zomboid → servertest.ini from env) — no ARK-style INI files to render. Nothing to write.
+    // Icarus → ServerSettings.ini, Valheim → launch args, Enshrouded → enshrouded_server.json)
+    // — none have ARK-style INI files for us to render. Nothing to write.
     if (
       game === Game.MINECRAFT ||
       game === Game.ICARUS ||
       game === Game.BEDROCK ||
       game === Game.VALHEIM ||
-      game === Game.ENSHROUDED ||
-      game === Game.ZOMBOID
+      game === Game.ENSHROUDED
     )
       return;
+
+    // Project Zomboid: the danixu86 image applies env vars by sed-ing
+    // data/Server/servertest.ini — but on FIRST boot that file doesn't exist yet, so
+    // none of them (RCON password, join password, display name…) would land until a
+    // restart (verified live). Seed a minimal ini holding exactly the keys the
+    // image's sed patches, plus MaxPlayers (which has no env var); PZ merges every
+    // other default in on boot. On later starts just keep MaxPlayers in sync.
+    if (game === Game.ZOMBOID) {
+      const dir = join(env.DATA_DIR, "instances", server.id, "data", "Server");
+      await mkdir(dir, { recursive: true });
+      const file = join(dir, "servertest.ini");
+      const exists = await stat(file).then(() => true).catch(() => false);
+      if (!exists) {
+        const seed = [
+          "PublicName=",
+          "Public=false",
+          "Password=",
+          `MaxPlayers=${server.maxPlayers}`,
+          `UDPPort=${server.rawSocketPort}`,
+          `RCONPort=${server.rconPort}`,
+          "RCONPassword=",
+          "Mods=",
+          "WorkshopItems=",
+          "SteamVAC=true",
+          "",
+        ].join("\n");
+        await writeFile(file, seed, "utf8");
+      } else {
+        const ini = await readFile(file, "utf8");
+        const patched = /^MaxPlayers=/m.test(ini)
+          ? ini.replace(/^MaxPlayers=.*$/m, `MaxPlayers=${server.maxPlayers}`)
+          : `${ini}\nMaxPlayers=${server.maxPlayers}\n`;
+        if (patched !== ini) await writeFile(file, patched, "utf8");
+      }
+      // The image's fixed steam user must be able to rewrite the file on boot.
+      await chown(dir, SERVER_UID[game], SERVER_GID[game]).catch(() => undefined);
+      await chown(file, SERVER_UID[game], SERVER_GID[game]).catch(() => undefined);
+      return;
+    }
 
     // 7 Days to Die's settings live in sdtdserver.xml (not env vars) — render it into
     // the serverfiles bind. The vinanrra image chowns the mounts to PUID/PGID on
