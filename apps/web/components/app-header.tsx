@@ -1,7 +1,8 @@
 "use client";
 import Link from "next/link";
+import { Logo } from "@/components/logo";
 import { usePathname } from "next/navigation";
-import { Server, LogOut, Boxes, Settings } from "lucide-react";
+import { LogOut, Boxes, Settings } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 
 export function AppHeader() {
@@ -14,7 +15,7 @@ export function AppHeader() {
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
         <div className="flex items-center gap-6">
           <Link href="/" className="flex items-center gap-2 font-semibold text-slate-100">
-            <Server className="h-5 w-5 text-ark-accent" />
+            <Logo className="h-6 w-6" />
             Palisade
           </Link>
           {token && (

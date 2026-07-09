@@ -1,4 +1,4 @@
-# Palisade
+# <img src="unraid/palisade-icon.png" width="40" alt="" align="top"> Palisade
 
 > Formerly **ARK Server Manager** — it outgrew the name. Old repo links redirect.
 
