@@ -169,7 +169,7 @@ export default function ServerDetailPage({ params }: { params: Promise<{ id: str
             ? new Set<Tab>(["Console", "Mods"]) // no RCON, no mod support
             : server.game === Game.VRISING
               ? new Set<Tab>(["Mods"]) // RCON console, but no mod support
-              : server.game === Game.SOTF || server.game === Game.SATISFACTORY || server.game === Game.LIF || server.game === Game.ATS || server.game === Game.ETS2
+              : server.game === Game.SOTF || server.game === Game.SATISFACTORY || server.game === Game.LIF || server.game === Game.ATS || server.game === Game.ETS2 || server.game === Game.CORE_KEEPER
                 ? new Set<Tab>(["Console", "Mods"]) // no RCON/console, no mod browser
                 : new Set<Tab>();
   const visibleTabs = TABS.filter((t) => !hiddenTabs.has(t));
@@ -451,14 +451,17 @@ function Overview({ server, onChanged }: { server: ServerSummary; onChanged: () 
   const isSatisfactory = server.game === Game.SATISFACTORY;
   const isLif = server.game === Game.LIF;
   const isAts = server.game === Game.ATS || server.game === Game.ETS2;
-  const noQuery = isMc || isBedrock || isSdtd || isZomboid || isSatisfactory; // Valheim/Enshrouded/V Rising have a real query port; Zomboid's + Satisfactory's mirror the game port
-  const noRcon = isIcarus || isBedrock || isValheim || isSdtd || isEnshrouded || isSotf || isSatisfactory || isLif || isAts; // 7DTD's console is telnet
-  const noMods = isIcarus || isBedrock || isValheim || isSdtd || isEnshrouded || isVRising || isSotf || isSatisfactory || isLif || isAts;
+  const isCoreKeeper = server.game === Game.CORE_KEEPER;
+  const noQuery = isMc || isBedrock || isSdtd || isZomboid || isSatisfactory || isCoreKeeper; // Valheim/Enshrouded/V Rising have a real query port; Zomboid's + Satisfactory's mirror the game port
+  const noRcon = isIcarus || isBedrock || isValheim || isSdtd || isEnshrouded || isSotf || isSatisfactory || isLif || isAts || isCoreKeeper; // 7DTD's console is telnet
+  const noMods = isIcarus || isBedrock || isValheim || isSdtd || isEnshrouded || isVRising || isSotf || isSatisfactory || isLif || isAts || isCoreKeeper;
   const row = (k: string, v: string): [string, string] => [k, v];
   const rows: [string, string][] = [
     row("Game", server.game),
     row("Map", mapLabel(server.map)),
-    row("Game port", `${server.ports.game}/${isMc ? "tcp" : "udp"}`),
+    ...(isCoreKeeper
+      ? [row("Connection", "Steam relay (Game ID)")]
+      : [row("Game port", `${server.ports.game}/${isMc ? "tcp" : "udp"}`)]),
     ...(noQuery ? [] : [row("Query port", `${server.ports.query}/udp`)]),
     ...(noRcon ? [] : [row("RCON port", `${server.ports.rcon}/tcp`)]),
     row("Max players", String(server.maxPlayers)),
@@ -487,25 +490,28 @@ function Overview({ server, onChanged }: { server: ServerSummary; onChanged: () 
         )}
         <ConnectCommand
           game={server.game}
+          serverId={server.id}
           gamePort={server.ports.game}
           queryPort={server.ports.query}
           joinPassword={server.joinPassword}
           className="mt-4 max-w-sm"
         />
-        <UnofficialListHelp
-          game={server.game}
-          serverName={server.name}
-          mapName={mapLabel(server.map)}
-          queryPort={server.ports.query}
-          hasJoinPassword={Boolean(server.joinPassword)}
-          defaultOpen
-          className="mt-3 max-w-sm"
-        />
+        {!isCoreKeeper && (
+          <UnofficialListHelp
+            game={server.game}
+            serverName={server.name}
+            mapName={mapLabel(server.map)}
+            queryPort={server.ports.query}
+            hasJoinPassword={Boolean(server.joinPassword)}
+            defaultOpen
+            className="mt-3 max-w-sm"
+          />
+        )}
       </div>
       <GeneralCard server={server} onSaved={onChanged} />
       <ServerAccessCard server={server} onSaved={onChanged} />
-      <PortsCard server={server} onSaved={onChanged} />
-      <PortForwardsCard serverId={server.id} />
+      {!isCoreKeeper && <PortsCard server={server} onSaved={onChanged} />}
+      {!isCoreKeeper && <PortForwardsCard serverId={server.id} />}
       {/* File-managed access lists (Valheim/Bedrock/7DTD); RCON games use the Console. */}
       {(isValheim || isBedrock || isSdtd) && <AccessListsCard serverId={server.id} />}
     </div>

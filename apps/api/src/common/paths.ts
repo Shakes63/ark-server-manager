@@ -93,6 +93,10 @@ export const LocalPaths = {
         return ["serverfiles/.local/share/American Truck Simulator"];
       case Game.ETS2:
         return ["serverfiles/.local/share/Euro Truck Simulator 2"];
+      case Game.CORE_KEEPER:
+        // The world lives in the server-data bind; the install (+ GameID.txt,
+        // which is derived from the world anyway) is skipped.
+        return ["data"];
       default:
         return ["ShooterGame/Saved"]; // ASA (POK)
     }

@@ -60,6 +60,7 @@ const ACTIONS_BY_GAME: Record<Game, PlayerAction[]> = {
   [Game.LIF]: [], // no console; admin is the in-game GM password
   [Game.ATS]: [], // no console; Convoy sessions have no server-side moderation
   [Game.ETS2]: [],
+  [Game.CORE_KEEPER]: [], // no console; joins are gated by the secret Game ID
 };
 
 const CAPTURE_NOTES: Partial<Record<Game, string>> = {

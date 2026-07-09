@@ -34,6 +34,8 @@ import {
   SATISFACTORY_CONFIG_DIR,
   LIF_STEAMCMD_DIR,
   LIF_SERVERFILES_DIR,
+  CORE_KEEPER_FILES_DIR,
+  CORE_KEEPER_DATA_DIR,
 } from "../common/images";
 // (ATS reuses the ich777 wrapper mount points LIF_STEAMCMD_DIR / LIF_SERVERFILES_DIR.)
 import { ZOMBOID_STEAM_PORTS } from "../catalog/ports";
@@ -83,6 +85,7 @@ export function buildContainerSpec(input: RuntimeSpecInput): Docker.ContainerCre
   if (input.game === Game.SATISFACTORY) return buildSatisfactorySpec(input);
   if (input.game === Game.LIF) return buildLifSpec(input);
   if (input.game === Game.ATS || input.game === Game.ETS2) return buildAtsSpec(input);
+  if (input.game === Game.CORE_KEEPER) return buildCoreKeeperSpec(input);
   return buildAseSpec(input);
 }
 
@@ -1440,6 +1443,75 @@ function buildLifSpec(input: RuntimeSpecInput): Docker.ContainerCreateOptions {
 }
 
 const STEAM_APP_ID_LIF = 320850;
+
+/** The repurposed map field -> Core Keeper's WORLD_MODE numeric value. */
+const CORE_KEEPER_WORLD_MODES: Record<string, number> = {
+  CKNormal: 0,
+  CKHard: 1,
+  CKCreative: 2,
+  CKCasual: 4,
+};
+
+/**
+ * Core Keeper: drive the escaping image via env vars. The server runs in the
+ * game's default STEAM RELAY mode — no ports are bound, published, or forwarded;
+ * players join with the secret Game ID the server writes to GameID.txt in the
+ * files bind (surfaced by the manager's join-info endpoint). The image installs
+ * app 1963720 via SteamCMD on boot and runs as PUID/PGID. NO RCON.
+ */
+function buildCoreKeeperSpec(input: RuntimeSpecInput): Docker.ContainerCreateOptions {
+  const env = loadEnv();
+
+  const ckEnv = [
+    `TZ=${input.timezone || env.TZ}`,
+    `PUID=${env.PUID}`,
+    `PGID=${env.PGID}`,
+    `WORLD_NAME=${input.sessionName}`,
+    `MAX_PLAYERS=${Math.min(Math.max(input.maxPlayers, 1), 20)}`,
+    `WORLD_MODE=${CORE_KEEPER_WORLD_MODES[input.map] ?? 0}`,
+    ...coreKeeperCatalogEnv(input),
+  ];
+
+  const root = HostPaths.instanceRoot(input.serverId);
+  const binds = [
+    `${root}/files:${CORE_KEEPER_FILES_DIR}`, // game install + GameID.txt
+    `${root}/data:${CORE_KEEPER_DATA_DIR}`, // world saves
+  ];
+
+  const hostNet = env.GAME_HOST_NETWORK;
+  return {
+    name: containerName(input.serverId, input.game, input.sessionName),
+    Image: IMAGES[Game.CORE_KEEPER],
+    Hostname: containerName(input.serverId, input.game, input.sessionName),
+    Env: ckEnv,
+    Labels: serverLabels(input, env.PUBLIC_BASE_URL),
+    HostConfig: {
+      Binds: binds,
+      ...(hostNet ? { NetworkMode: "host" } : {}),
+      RestartPolicy: { Name: "no" }, // manager watchdog owns restarts
+      Memory: input.ramLimitMb ? input.ramLimitMb * 1024 * 1024 : undefined,
+      NanoCpus: input.cpuLimit ? Math.round(input.cpuLimit * 1e9) : undefined,
+    },
+    // Relay mode needs no inbound ports; on the bridge the container still joins
+    // ark-net for consistency (harmless — nothing connects to it).
+    ...(hostNet ? {} : { NetworkingConfig: { EndpointsConfig: { [ARK_NETWORK]: {} } } }),
+  };
+}
+
+/** Core Keeper settings -> escaping env vars. Booleans become true/false; EMPTY
+ *  values are dropped — critical for SEASON, which must be unset for real-date
+ *  seasons. */
+function coreKeeperCatalogEnv(input: RuntimeSpecInput): string[] {
+  const out: string[] = [];
+  for (const def of input.catalog.settings) {
+    if (def.target !== SettingTarget.Env) continue;
+    const raw = input.config.values?.[def.key] ?? def.default;
+    if (raw === undefined || raw === null || raw === "") continue;
+    const val = typeof raw === "boolean" ? (raw ? "true" : "false") : String(raw);
+    out.push(`${def.emitAs ?? def.key}=${val}`);
+  }
+  return out;
+}
 
 /**
  * American Truck Simulator / Euro Truck Simulator 2 — same ich777 SteamCMD wrapper

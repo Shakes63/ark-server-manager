@@ -65,6 +65,11 @@ export const IMAGES: Record<Game, string> = {
   // Same wrapper, ETS2 flavour — identical contract to ATS (app 1948160, save dir
   // "Euro Truck Simulator 2", native eurotrucks2_server binary).
   [Game.ETS2]: "ghcr.io/ich777/steamcmd:ets2",
+  // escaping/core-keeper-dedicated — installs the native Linux Core Keeper server
+  // (app 1963720) via SteamCMD on boot. Env-driven. DEFAULT NETWORK MODE IS STEAM
+  // RELAY: no ports at all — players join with the Game ID token the server writes
+  // to GameID.txt in the server-files bind. NO RCON.
+  [Game.CORE_KEEPER]: "escaping/core-keeper-dedicated:latest",
 };
 
 /** POK keeps all instance data (install + saves + config) under this path. */
@@ -137,6 +142,10 @@ export const LIF_SERVERFILES_DIR = "/serverdata/serverfiles";
 export const ATS_SAVE_SUBDIR = ".local/share/American Truck Simulator";
 export const ETS2_SAVE_SUBDIR = ".local/share/Euro Truck Simulator 2";
 
+/** Core Keeper (escaping): the game install + GameID.txt vs the world saves. */
+export const CORE_KEEPER_FILES_DIR = "/home/steam/core-keeper-dedicated";
+export const CORE_KEEPER_DATA_DIR = "/home/steam/core-keeper-data";
+
 /**
  * The uid/gid each image runs the server as. Neither chowns its mounts fully
  * (POK never does; hermsi only chowns the volume root), so the manager makes the
@@ -160,6 +169,7 @@ export const SERVER_UID: Record<Game, number> = {
   [Game.LIF]: 99, // ich777's default nobody/users, remapped via UID/GID env (we pass PUID/PGID)
   [Game.ATS]: 99, // same ich777 wrapper convention
   [Game.ETS2]: 99,
+  [Game.CORE_KEEPER]: 1000, // escaping's steam user, remapped via PUID/PGID (we pass ours)
 };
 export const SERVER_GID: Record<Game, number> = {
   [Game.ASA]: 7777,
@@ -179,4 +189,5 @@ export const SERVER_GID: Record<Game, number> = {
   [Game.LIF]: 100,
   [Game.ATS]: 100,
   [Game.ETS2]: 100,
+  [Game.CORE_KEEPER]: 1000,
 };

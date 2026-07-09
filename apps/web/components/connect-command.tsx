@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { Copy, Check, Terminal, Lock } from "lucide-react";
 import { Game } from "@ark/shared";
+import { apiGet } from "@/lib/api";
 
 /** A copyable mono value with its own copy state + clipboard fallback (the
  *  manager is usually served over plain http on a LAN IP, where
@@ -62,14 +63,60 @@ function CopyRow({ value, title }: { value: string; title?: string }) {
  * Conan: there's no `open` console — players use the in-game Direct Connect, which
  * (unlike ARK) takes the QUERY port and accepts the password at the prompt.
  */
+/** Core Keeper's join surface: the relay Game ID token (no IP, no ports). Fetched
+ *  from the manager (it reads the GameID.txt the server writes on boot) and
+ *  refreshed for a couple of minutes so it appears shortly after the first boot. */
+function CoreKeeperJoinCard({ serverId, className = "" }: { serverId: string; className?: string }) {
+  const [gameId, setGameId] = useState<string | null>(null);
+  useEffect(() => {
+    let stop = false;
+    let tries = 0;
+    const load = () => {
+      void apiGet<{ gameId: string | null }>(`/servers/${serverId}/join-info`)
+        .then((r) => {
+          if (stop) return;
+          if (r.gameId) setGameId(r.gameId);
+          else if (tries++ < 24) setTimeout(load, 5000); // first boot writes it late
+        })
+        .catch(() => undefined);
+    };
+    load();
+    return () => {
+      stop = true;
+    };
+  }, [serverId]);
+  return (
+    <div className={className}>
+      <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-slate-400">
+        <Terminal className="h-3.5 w-3.5" /> Game ID (in-game join token)
+      </div>
+      {gameId ? (
+        <CopyRow value={gameId} title="Copy the Game ID" />
+      ) : (
+        <div className="rounded-md border border-ark-border bg-ark-bg px-2.5 py-1.5 font-mono text-sm text-slate-500">
+          generated on first boot…
+        </div>
+      )}
+      <p className="mt-1 text-[11px] leading-snug text-slate-500">
+        In Core Keeper: <span className="font-mono">Multiplayer → Join Game</span> — paste this Game ID.
+        Joins go through Steam's relay, so <span className="text-slate-300">no ports or IP are needed</span>,
+        online or LAN. Treat the ID like a password: anyone who has it can join.
+      </p>
+    </div>
+  );
+}
+
 export function ConnectCommand({
   game,
+  serverId,
   gamePort,
   queryPort,
   joinPassword,
   className = "",
 }: {
   game: Game;
+  /** Needed by games whose join info comes from the manager (Core Keeper). */
+  serverId?: string;
   gamePort: number;
   /** Steam query port — Conan's Direct Connect uses this, not the game port. */
   queryPort?: number;
@@ -82,6 +129,10 @@ export function ConnectCommand({
   // render agree — avoids a hydration mismatch.
   useEffect(() => setHost(window.location.hostname), []);
   const hostOr = host || "<server-ip>";
+
+  if (game === Game.CORE_KEEPER && serverId) {
+    return <CoreKeeperJoinCard serverId={serverId} className={className} />;
+  }
 
   if (game === Game.CONAN) {
     return (

@@ -34,6 +34,8 @@ export enum Game {
   ATS = "ATS",
   /** Euro Truck Simulator 2 — ich777 image (native Linux, ATS twin); we patch server_config.sii; NO RCON. */
   ETS2 = "ETS2",
+  /** Core Keeper — escaping image (native Linux), env-driven; Steam-relay Game ID joins, NO ports/RCON. */
+  CORE_KEEPER = "CORE_KEEPER",
 }
 
 /** Friendly game names for the UI. */
@@ -55,6 +57,7 @@ export const GAME_LABELS: Record<Game, string> = {
   [Game.LIF]: "Life is Feudal: Your Own",
   [Game.ATS]: "American Truck Simulator",
   [Game.ETS2]: "Euro Truck Simulator 2",
+  [Game.CORE_KEEPER]: "Core Keeper",
 };
 
 /** SteamCMD app IDs for the dedicated server (anonymous login). */
@@ -91,6 +94,8 @@ export const STEAM_APP_ID: Record<Game, number> = {
   [Game.ATS]: 2239530,
   // Euro Truck Simulator 2 dedicated server (the ich777 image installs it via SteamCMD).
   [Game.ETS2]: 1948160,
+  // Core Keeper dedicated server (the escaping image installs it via SteamCMD).
+  [Game.CORE_KEEPER]: 1963720,
 };
 
 /** Steam Workshop "consumer" app ids for mod downloads (ARK: Survival Evolved /
@@ -135,6 +140,7 @@ export const GAME_ICONS: Record<Game, string> = {
   [Game.LIF]: "https://cdn.cloudflare.steamstatic.com/steam/apps/290080/header.jpg",
   [Game.ATS]: "https://cdn.cloudflare.steamstatic.com/steam/apps/270880/header.jpg",
   [Game.ETS2]: "https://cdn.cloudflare.steamstatic.com/steam/apps/227300/header.jpg",
+  [Game.CORE_KEEPER]: "https://cdn.cloudflare.steamstatic.com/steam/apps/1621690/header.jpg",
 };
 
 /** CurseForge numeric game id for ASA (used by the mod browser). */
@@ -192,6 +198,8 @@ export const RAM_ESTIMATE_MB: Record<Game, number> = {
   // ATS's dedicated server is tiny — well under 2 GB even with 8 players.
   [Game.ATS]: 2000,
   [Game.ETS2]: 2000,
+  // Core Keeper's server is lightweight (~1-2 GB even populated).
+  [Game.CORE_KEEPER]: 2000,
 };
 
 /**
@@ -218,6 +226,7 @@ export const MAX_PLAYERS_BY_GAME: Record<Game, number> = {
   [Game.LIF]: 64, // world_1.xml maxPlayers hard range 1-64
   [Game.ATS]: 8, // SCS's hard cap for Convoy sessions
   [Game.ETS2]: 8, // same SCS Convoy cap
+  [Game.CORE_KEEPER]: 20, // no hard cap; the game is designed for 1-8
 };
 
 /** The default player count the create form pre-fills per game (a sensible starting
@@ -240,6 +249,7 @@ export const DEFAULT_MAX_PLAYERS_BY_GAME: Record<Game, number> = {
   [Game.LIF]: 16,
   [Game.ATS]: 8,
   [Game.ETS2]: 8,
+  [Game.CORE_KEEPER]: 8,
 };
 
 /** A password field on the create form: whether to show it at all, its label, an
@@ -295,6 +305,7 @@ export const ADMIN_PASSWORD_META: Record<Game, PasswordFieldMeta> = {
   },
   [Game.ATS]: { show: false, label: "" }, // no admin/console concept — session host moderates
   [Game.ETS2]: { show: false, label: "" },
+  [Game.CORE_KEEPER]: { show: false, label: "" }, // no admin/console concept
 };
 
 /** The join (server) password field, per game. Every game can have one, but Valheim
@@ -337,6 +348,9 @@ export const JOIN_PASSWORD_META: Record<Game, PasswordFieldMeta> = {
     label: "Session password (players need it to join)",
     help: "Applies from the second start — the config file is seeded on the first boot.",
   },
+  // Core Keeper joins are gated by the secret Game ID itself (relay mode has no
+  // password support), so there's no join-password field.
+  [Game.CORE_KEEPER]: { show: false, label: "" },
 };
 
 /** Default port offsets within a per-server allocation block. */
@@ -439,6 +453,10 @@ export const ATS_OFFICIAL_MAPS = ["ATSWorld"] as const;
 /** ETS2's world is fixed by the server_packages export — no map choice here. */
 export const ETS2_OFFICIAL_MAPS = ["ETS2World"] as const;
 
+/** Core Keeper worlds are procedural — we repurpose the map field as the world
+ *  MODE the world is created with (like Minecraft's world type). */
+export const CORE_KEEPER_OFFICIAL_MAPS = ["CKNormal", "CKHard", "CKCreative", "CKCasual"] as const;
+
 /** Friendly display names for known level names (raw level → label). */
 export const MAP_LABELS: Record<string, string> = {
   // Conan Exiles
@@ -475,6 +493,11 @@ export const MAP_LABELS: Record<string, string> = {
   ATSWorld: "The West (base map + exported DLCs)",
   // Euro Truck Simulator 2 (world defined by server_packages)
   ETS2World: "Europe (base map + exported DLCs)",
+  // Core Keeper world modes (repurposed map field)
+  CKNormal: "Normal",
+  CKHard: "Hard",
+  CKCreative: "Creative",
+  CKCasual: "Casual",
   // Sons of the Forest game modes (repurposed map field)
   Normal: "Normal (survival)",
   Hard: "Hard (survival)",

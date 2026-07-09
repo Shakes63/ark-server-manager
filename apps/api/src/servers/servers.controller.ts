@@ -71,6 +71,12 @@ export class ServersController {
     return this.servers.getConfig(id);
   }
 
+  /** Core Keeper's relay join token (from GameID.txt), or null until first boot. */
+  @Get(":id/join-info")
+  joinInfo(@Param("id") id: string) {
+    return this.servers.joinInfo(id);
+  }
+
   // Captured log/console for the current run (survives refresh + tab switches;
   // wiped on Start). Complete whether or not a tab was open during boot.
   @Get(":id/logs")

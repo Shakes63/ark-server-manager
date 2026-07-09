@@ -146,6 +146,9 @@ export const READY_RE_BY_GAME: Record<Game, RegExp> = {
   [Game.ATS]: /\[MP\] Server init/i,
   // ETS2: same engine + wrapper as ATS — same stdout marker.
   [Game.ETS2]: /\[MP\] Server init/i,
+  // Core Keeper: the wrapper prints the join token ("Started session with Game ID
+  // …") once the world is hosted on the relay. PROVISIONAL — confirm live.
+  [Game.CORE_KEEPER]: /Game ID/i,
 };
 
 /** The "server is now joinable" log-marker regex for a game. */
@@ -402,6 +405,17 @@ export class ServersService implements OnApplicationBootstrap {
         },
       );
     });
+  }
+
+  /** Join info beyond IP:port — currently Core Keeper's relay Game ID, read from
+   *  the GameID.txt the server writes next to its executable on (first) boot. */
+  async joinInfo(id: string): Promise<{ gameId: string | null }> {
+    const row = await this.prisma.server.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException("Server not found");
+    if ((row.game as Game) !== Game.CORE_KEEPER) return { gameId: null };
+    const file = join(LocalPaths.instanceRoot(id), "files", "GameID.txt");
+    const gameId = await readFile(file, "utf8").then((t) => t.trim() || null).catch(() => null);
+    return { gameId };
   }
 
   async getConfig(id: string): Promise<ServerConfigValues> {
@@ -1128,7 +1142,8 @@ export class ServersService implements OnApplicationBootstrap {
       game === Game.SATISFACTORY ||
       game === Game.LIF ||
       game === Game.ATS ||
-      game === Game.ETS2
+      game === Game.ETS2 ||
+      game === Game.CORE_KEEPER
     )
       return;
     if (!containerId || game === Game.CONAN || game === Game.MINECRAFT || game === Game.ZOMBOID) {

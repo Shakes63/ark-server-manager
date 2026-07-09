@@ -986,6 +986,50 @@ server_config : _nameless.1ad.e2c8.f150 {
   });
 });
 
+describe("buildContainerSpec (Core Keeper / escaping)", () => {
+  async function buildCk(config: ServerConfigValues, map = "CKNormal") {
+    const { buildContainerSpec } = await import("./runtime-spec");
+    const { CORE_KEEPER_CATALOG } = await import("../catalog/core-keeper.catalog");
+    return buildContainerSpec({
+      serverId: "srv1",
+      game: Game.CORE_KEEPER,
+      map,
+      sessionName: "Cavern Crew",
+      ports: { game: 0, rawSocket: 0, query: 0, rcon: 0 },
+      maxPlayers: 8,
+      adminPassword: "",
+      serverPassword: null,
+      modIds: [],
+      cluster: null,
+      config,
+      catalog: CORE_KEEPER_CATALOG,
+    });
+  }
+
+  it("relay mode: env-driven with NO published ports, world mode from the map field", async () => {
+    const spec = await buildCk({ values: {} }, "CKHard");
+    expect(spec.Image).toBe("escaping/core-keeper-dedicated:latest");
+    const env = envOf(spec);
+    expect(env).toContain("WORLD_NAME=Cavern Crew");
+    expect(env).toContain("MAX_PLAYERS=8");
+    expect(env).toContain("WORLD_MODE=1"); // CKHard
+    // Relay mode — nothing bound, nothing published.
+    expect(spec.HostConfig?.PortBindings).toBeUndefined();
+    expect(spec.ExposedPorts).toBeUndefined();
+    const binds = spec.HostConfig?.Binds ?? [];
+    expect(binds.some((b) => b.endsWith(":/home/steam/core-keeper-dedicated"))).toBe(true);
+    expect(binds.some((b) => b.endsWith(":/home/steam/core-keeper-data"))).toBe(true);
+  });
+
+  it("drops empty catalog values (SEASON unset = real-date seasons)", async () => {
+    const env = envOf(await buildCk({ values: { SEASON: "", WORLD_SEED: "12345" } }));
+    expect(env.some((e) => e.startsWith("SEASON="))).toBe(false);
+    expect(env).toContain("WORLD_SEED=12345");
+    const withSeason = envOf(await buildCk({ values: { SEASON: "2" } }));
+    expect(withSeason).toContain("SEASON=2");
+  });
+});
+
 describe("parsePzModIds", () => {
   it("parses 'Mod ID:' lines from a Workshop description (deduped, in order)", async () => {
     const { parsePzModIds } = await import("../mods/mods.service");

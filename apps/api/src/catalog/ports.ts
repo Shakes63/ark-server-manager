@@ -128,6 +128,13 @@ export const ATS_PORTS: PortSet = { game: 27015, rawSocket: 27017, query: 27016,
 export const ETS2_PORTS: PortSet = { game: 27018, rawSocket: 27020, query: 27019, rcon: 0 };
 
 /**
+ * Core Keeper (relay mode): NO ports at all — the server talks outbound to Steam's
+ * relay and players join with the Game ID token. All slots are 0; nothing is
+ * published, nothing needs forwarding, and the ports/query UI is hidden.
+ */
+export const CORE_KEEPER_PORTS: PortSet = { game: 0, rawSocket: 0, query: 0, rcon: 0 };
+
+/**
  * Every host port a server binds (skipping unused 0 slots — e.g. rcon on no-RCON
  * games). Valheim also binds its HTTP status endpoint on game + 3, and Minecraft's
  * query column mirrors the game port (the set dedupes it). Used by the start-time
@@ -222,6 +229,8 @@ export function forwardSpec(game: Game, ports: PortSet): ForwardPort[] {
         { port: ports.game, proto: "udp", label: "connection" },
         { port: ports.query, proto: "udp", label: "query (server browser)" },
       ];
+    case Game.CORE_KEEPER:
+      return []; // Steam relay — nothing to forward
     default:
       // ARK family + Conan: game + raw socket + query, all UDP.
       return [
@@ -247,5 +256,6 @@ export function portsFor(game: Game): PortSet {
   if (game === Game.LIF) return LIF_PORTS;
   if (game === Game.ATS) return ATS_PORTS;
   if (game === Game.ETS2) return ETS2_PORTS;
+  if (game === Game.CORE_KEEPER) return CORE_KEEPER_PORTS;
   return FIXED_PORTS;
 }
