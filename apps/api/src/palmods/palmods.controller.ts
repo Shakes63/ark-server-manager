@@ -55,4 +55,10 @@ export class PalModsController {
     if (!file) throw new BadRequestException("No file uploaded");
     return this.palmods.installFramework(id, file.buffer);
   }
+
+  /** Download + verify + install the pinned UE4SS Linux build, then enable it. */
+  @Post("framework/install-ue4ss")
+  installUe4ss(@Param("id") id: string) {
+    return this.palmods.installFrameworkFromUpstream(id);
+  }
 }

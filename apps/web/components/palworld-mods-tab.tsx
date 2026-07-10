@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { Upload, Trash2, Package, ShieldCheck, Loader2, Save } from "lucide-react";
-import { apiGet, apiPatch, apiDelete, apiUpload } from "@/lib/api";
+import { Upload, Trash2, Package, ShieldCheck, Loader2, Save, Download } from "lucide-react";
+import { apiGet, apiPatch, apiPost, apiDelete, apiUpload } from "@/lib/api";
 
 type PalModStatus = {
   paks: string[];
@@ -115,10 +115,24 @@ export function PalworldModsTab({ serverId }: { serverId: string }) {
           <ShieldCheck className="h-4 w-4" /> Server mod framework (UE4SS)
         </h3>
 
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            className="btn-primary"
+            disabled={busy}
+            onClick={() => run(() => apiPost(`/servers/${serverId}/palmods/framework/install-ue4ss`))}
+          >
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            Install UE4SS (Linux)
+          </button>
+          <span className="text-[11px] text-slate-500">
+            Downloads + verifies the build, extracts it, and enables the framework.
+          </span>
+        </div>
+
         <p className="text-[11px] leading-snug text-slate-500">
           Official UE4SS builds are Windows-only, so there is no{" "}
-          <span className="font-mono">libUE4SS.so</span> on the UE4SS releases page. Use the
-          experimental{" "}
+          <span className="font-mono">libUE4SS.so</span> on the UE4SS releases page. The button above
+          installs the experimental{" "}
           <a
             href={UE4SS_LINUX_RELEASE}
             target="_blank"
@@ -126,9 +140,8 @@ export function PalworldModsTab({ serverId }: { serverId: string }) {
             className="text-ark-accent hover:underline"
           >
             native Linux build
-          </a>{" "}
-          (download <span className="font-mono">UE4SS_0.0.0.zip</span>) and upload it below as-is —
-          it already contains <span className="font-mono">libUE4SS.so</span> at the archive root.
+          </a>
+          . Prefer a different build? Upload its .zip below instead.
         </p>
 
         <label className="flex items-center gap-2 text-sm text-slate-200">
