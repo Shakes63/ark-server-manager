@@ -1,9 +1,13 @@
 # Reference deployment: a single manager container that controls Docker through
 # the host's Docker socket, mounted directly (DOCKER_HOST=unix:///var/run/docker.sock).
 #
-# If you prefer least-privilege Docker access, put a tecnativa/docker-socket-proxy
-# in front instead: give it the socket, set the manager's DOCKER_HOST to
-# tcp://socket-proxy:2375, and drop the socket bind mount below.
+# RECOMMENDED HARDENING: uncomment the docker-proxy service below, then on the
+# manager set DOCKER_HOST to tcp://docker-proxy:2375, remove the socket bind
+# mount, and add docker-proxy-net to its networks. The manager then only gets
+# the Docker API endpoints it actually uses (containers, images, ping) — exec,
+# volumes, networks, build, swarm, and secrets stay blocked at the proxy.
+# Caveat: the proxy filters endpoints, not payloads — container *creation* is
+# still allowed, so this narrows the blast radius rather than eliminating it.
 #
 # On Unraid, set HOST_DATA_DIR to the real appdata path so bind mounts for the
 # spawned game containers resolve correctly on the host, e.g.
@@ -50,6 +54,27 @@ services:
     networks: [ark-net]
     restart: unless-stopped
 
+  # Least-privilege Docker API gateway (opt in — see header comment).
+  # docker-proxy:
+  #   image: tecnativa/docker-socket-proxy:latest
+  #   container_name: palisade-docker-proxy
+  #   environment:
+  #     # Palisade's full API surface: container lifecycle + image pulls + ping.
+  #     CONTAINERS: 1        # list/inspect/logs/stats/attach/wait
+  #     IMAGES: 1            # image inspect + pull (with POST)
+  #     POST: 1              # create/remove/wait and other writes
+  #     ALLOW_START: 1
+  #     ALLOW_STOP: 1
+  #     ALLOW_RESTARTS: 1
+  #     # Everything else stays at the proxy's deny-by-default:
+  #     # EXEC/VOLUMES/NETWORKS/BUILD/SWARM/SECRETS/AUTH/PLUGINS = 0
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock:ro
+  #   networks: [docker-proxy-net]
+  #   restart: unless-stopped
+
 networks:
   ark-net:
     name: ark-net
+  # docker-proxy-net:
+  #   internal: true   # no outbound access; only the manager talks to the proxy
