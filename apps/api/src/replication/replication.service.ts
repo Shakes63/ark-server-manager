@@ -213,6 +213,10 @@ export class ReplicationService implements OnModuleInit {
   /** Stream `tar czf - -C <dir> .` straight into the destination — no temp file. */
   private async uploadTarGz(localDir: string, dest: Destination, remotePath: string): Promise<void> {
     const tar = spawn("tar", ["czf", "-", "-C", localDir, "."]);
+    // Attach BEFORE any awaiting: tar can exit while the pipeline drains, and a
+    // listener added after "close" fired would wait forever (hung the first
+    // live sync exactly this way).
+    const exited = new Promise<number>((resolve) => tar.on("close", resolve));
     const sink = await dest.createWriteStream(remotePath);
     try {
       await pipeline(tar.stdout, sink);
@@ -220,7 +224,7 @@ export class ReplicationService implements OnModuleInit {
       await dest.remove(remotePath).catch(() => undefined); // no half-written artifacts
       throw err;
     }
-    const code: number = await new Promise((resolve) => tar.on("close", resolve));
+    const code = await exited;
     if (code !== 0) {
       await dest.remove(remotePath).catch(() => undefined);
       throw new Error(`tar exited ${code} for ${localDir}`);

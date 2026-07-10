@@ -91,14 +91,14 @@ export function ReplicationCard() {
   };
 
   const syncNow = async () => {
-    setMsg("Syncing…");
+    setMsg("Sync started — large snapshots can take a few minutes…");
     try {
-      const res = await apiPost<{ ok: boolean; uploaded: number; skipped: boolean }>("/replication/sync");
-      setMsg(res.skipped ? "Skipped — replication is disabled or unconfigured." : `✓ Synced (${res.uploaded} new artifact${res.uploaded === 1 ? "" : "s"})`);
-      load();
+      await apiPost("/replication/sync");
+      // The sync runs in the background; refresh the status line as it lands.
+      window.setTimeout(load, 5000);
+      window.setTimeout(load, 30000);
     } catch (err) {
       setMsg(`✗ ${(err as Error).message}`);
-      load();
     }
   };
 

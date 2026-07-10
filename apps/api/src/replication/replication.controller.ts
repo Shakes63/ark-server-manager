@@ -63,9 +63,11 @@ export class ReplicationController {
     return this.replication.test();
   }
 
+  /** Kicks a sync off in the background — a full pass can take minutes with
+   *  large snapshots, far past proxy timeouts. Poll GET / for status. */
   @Post("sync")
-  async sync() {
-    const res = await this.replication.sync();
-    return { ok: !res.skipped, ...res };
+  sync() {
+    void this.replication.sync().catch(() => undefined);
+    return { started: true };
   }
 }
