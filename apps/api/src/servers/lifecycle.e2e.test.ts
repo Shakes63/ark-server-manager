@@ -296,3 +296,36 @@ describe("server lifecycle (fake Docker)", () => {
     }
   });
 });
+
+// A restart reclaims the memory it just freed, so the RAM guard must not gate the
+// way back up. Regression: restart() called start() unguarded, so on a box with
+// less free RAM than the server's ramLimitMb (a CAP, not real usage) the stop
+// succeeded and the start was refused — leaving the server down. Live-reproduced
+// on Palworld: needMb 12288 vs availableMb 11119, actual usage 825 MB.
+describe("restart", () => {
+  it("bypasses the RAM guard on the way back up (but not the port check)", async () => {
+    const row = makeRow({ state: ServerState.Running, ramLimitMb: 12288 });
+    const docker = new FakeDocker();
+    const { service } = await makeService(row, docker);
+    const svc = service as unknown as Record<string, unknown>;
+
+    let ramGuardCalls = 0;
+    let portCheckCalls = 0;
+    svc.assertRamAvailable = async () => {
+      ramGuardCalls++;
+      throw new Error("INSUFFICIENT_RAM");
+    };
+    svc.assertPortsFree = async () => {
+      portCheckCalls++;
+    };
+    svc.stop = async () => {
+      row.state = ServerState.Stopped;
+    };
+
+    await (svc.restart as (id: string) => Promise<void>).call(svc, row.id);
+
+    expect(ramGuardCalls, "restart must not consult the RAM guard").toBe(0);
+    expect(portCheckCalls, "restart must still check ports").toBe(1);
+    expect(docker.started).toEqual(["container-1"]);
+  });
+});

@@ -1220,9 +1220,15 @@ export class ServersService implements OnApplicationBootstrap {
     });
   }
 
+  /** Stop + start. The RAM guard is bypassed on the way back up: the server was
+   *  already running, so the host has demonstrably tolerated it, and the memory it
+   *  needs is the memory the stop just freed. Guarding here compares ramLimitMb (a
+   *  CAP, often far above real usage) against free RAM and can refuse the start —
+   *  stopping the server and leaving it down, which is the opposite of a restart.
+   *  Port conflicts are still checked (doStart), so this only skips the RAM check. */
   async restart(id: string): Promise<void> {
     await this.stop(id).catch(() => undefined);
-    await this.start(id);
+    await this.start(id, { force: true });
   }
 
   // ── Monitors: readiness + crash watchdog ────────────────────────────────────
