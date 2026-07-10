@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleIni
 import { Game, ServerState } from "@ark/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { RconService } from "../rcon/rcon.service";
+import { rconArg } from "../rcon/rcon-arg";
 import { LogCaptureService } from "../logs/log-capture.service";
 import { AccessListsService, type AccessListKey } from "../accesslists/accesslists.service";
 
@@ -308,29 +309,32 @@ export class SightingsService implements OnModuleInit {
       await this.rcon.ban(serverId, this.rconSubject(game, name, playerId));
       return { ok: true, detail: `Banned ${name}` };
     }
+    // Names come from live player lists — attacker-chosen. Sanitize whatever is
+    // interpolated into a command (the sighting lookup above used the raw name).
+    const safe = rconArg(name);
     if (game === Game.MINECRAFT && action === "whitelist") {
-      await this.rcon.exec(serverId, `whitelist add ${name}`);
+      await this.rcon.exec(serverId, `whitelist add ${safe}`);
       return { ok: true, detail: `${name} whitelisted` };
     }
     if (game === Game.MINECRAFT && action === "admin") {
-      await this.rcon.exec(serverId, `op ${name}`);
+      await this.rcon.exec(serverId, `op ${safe}`);
       return { ok: true, detail: `${name} opped` };
     }
     if (game === Game.ZOMBOID && action === "admin") {
-      await this.rcon.exec(serverId, `setaccesslevel "${name}" admin`);
+      await this.rcon.exec(serverId, `setaccesslevel "${safe}" admin`);
       return { ok: true, detail: `${name} is now an admin` };
     }
     if (game === Game.FACTORIO && action === "whitelist") {
-      await this.rcon.exec(serverId, `/whitelist add ${name}`);
+      await this.rcon.exec(serverId, `/whitelist add ${safe}`);
       return { ok: true, detail: `${name} whitelisted` };
     }
     if (game === Game.FACTORIO && action === "admin") {
-      await this.rcon.exec(serverId, `/promote ${name}`);
+      await this.rcon.exec(serverId, `/promote ${safe}`);
       return { ok: true, detail: `${name} promoted to admin` };
     }
     if (game === Game.RUST && action === "admin") {
       if (!playerId) throw new BadRequestException(`No SteamID captured for ${name} yet — try while they're online.`);
-      await this.rcon.exec(serverId, `moderatorid ${playerId} "${name}"`);
+      await this.rcon.exec(serverId, `moderatorid ${rconArg(playerId)} "${safe}"`);
       await this.rcon.exec(serverId, "server.writecfg");
       return { ok: true, detail: `${name} is now a moderator` };
     }

@@ -8,6 +8,7 @@ import { RealtimeGateway } from "../realtime/realtime.gateway";
 import { LogCaptureService } from "../logs/log-capture.service";
 import { SourceRcon } from "./source-rcon";
 import { TelnetRcon } from "./telnet-rcon";
+import { rconArg } from "./rcon-arg";
 import { containerName } from "../common/naming";
 import { loadEnv } from "../config/env";
 
@@ -124,9 +125,10 @@ export class RconService {
     return s.game as Game;
   }
 
-  async broadcast(serverId: string, message: string): Promise<string> {
+  async broadcast(serverId: string, rawMessage: string): Promise<string> {
     // ARK: ServerChat. Conan: broadcast. Palworld: Broadcast. Minecraft: say. 7DTD: say.
     const game = await this.gameOf(serverId);
+    const message = rconArg(rawMessage);
     if (game === Game.CONAN) return this.exec(serverId, `broadcast ${message}`);
     if (game === Game.PALWORLD) return this.exec(serverId, `Broadcast ${message}`);
     if (game === Game.MINECRAFT) return this.exec(serverId, `say ${message}`);
@@ -216,9 +218,10 @@ export class RconService {
       .filter(Boolean);
   }
 
-  async kick(serverId: string, playerId: string): Promise<string> {
+  async kick(serverId: string, rawPlayerId: string): Promise<string> {
     // 7DTD: `kick <name/id>`. Minecraft: `kick`. ARK-family: `KickPlayer`.
     const game = await this.gameOf(serverId);
+    const playerId = rconArg(rawPlayerId);
     if (game === Game.SEVEN_DAYS) return this.exec(serverId, `kick "${playerId}"`);
     if (game === Game.ZOMBOID) return this.exec(serverId, `kickuser "${playerId}"`);
     if (game === Game.FACTORIO) return this.exec(serverId, `/kick ${playerId}`);
@@ -227,9 +230,10 @@ export class RconService {
     return this.exec(serverId, `KickPlayer ${playerId}`);
   }
 
-  async ban(serverId: string, playerId: string): Promise<string> {
+  async ban(serverId: string, rawPlayerId: string): Promise<string> {
     // 7DTD: `ban add <name/id> 365 days`. Minecraft: `ban`. ARK-family: `BanPlayer`.
     const game = await this.gameOf(serverId);
+    const playerId = rconArg(rawPlayerId);
     if (game === Game.SEVEN_DAYS) return this.exec(serverId, `ban add "${playerId}" 365 days "banned"`);
     if (game === Game.ZOMBOID) return this.exec(serverId, `banuser "${playerId}"`);
     if (game === Game.FACTORIO) return this.exec(serverId, `/ban ${playerId}`);

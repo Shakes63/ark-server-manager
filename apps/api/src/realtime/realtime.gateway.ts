@@ -10,6 +10,7 @@ import {
 import { Server, Socket } from "socket.io";
 import type { RealtimeMessage } from "@ark/shared";
 import { AuthService } from "../auth/auth.service";
+import { loadEnv } from "../config/env";
 
 /**
  * Socket.IO gateway for live status, log tails, install progress, RCON output,
@@ -18,7 +19,15 @@ import { AuthService } from "../auth/auth.service";
 // addTrailingSlash:false lets engine.io accept the path after Next's rewrite
 // strips the trailing slash from `/socket.io/`; without it the polling
 // handshake 404s behind the single-origin proxy.
-@WebSocketGateway({ cors: { origin: true, credentials: true }, addTrailingSlash: false })
+// Same-origin through the Next rewrite proxy needs no CORS; cross-origin
+// sockets are denied unless origins are allowed via CORS_ORIGINS (like the API).
+@WebSocketGateway({
+  cors: {
+    origin: loadEnv().CORS_ORIGINS.length > 0 ? loadEnv().CORS_ORIGINS : false,
+    credentials: true,
+  },
+  addTrailingSlash: false,
+})
 export class RealtimeGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
 {

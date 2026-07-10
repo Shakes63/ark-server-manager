@@ -41,6 +41,20 @@ const schema = z.object({
     .string()
     .default("false")
     .transform((v) => v === "true" || v === "1"),
+
+  // Browsers reach the API same-origin through the Next rewrite proxy, so
+  // cross-origin requests are denied by default. If you serve the web UI from a
+  // different origin than the API, list the allowed origins here
+  // (comma-separated, e.g. "https://panel.example.com").
+  CORS_ORIGINS: z
+    .string()
+    .default("")
+    .transform((v) =>
+      v
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
+    ),
 });
 
 export type AppEnv = z.infer<typeof schema>;

@@ -79,6 +79,25 @@ export interface RuntimeSpecInput {
 
 /** Build the Docker create spec for a game-server container. */
 export function buildContainerSpec(input: RuntimeSpecInput): Docker.ContainerCreateOptions {
+  return hardenSpec(gameSpecFor(input));
+}
+
+/**
+ * Defense-in-depth applied to every game container: no-new-privileges blocks
+ * privilege escalation through setuid binaries (root dropping to a game user
+ * via su/gosu still works — that direction needs no escalation), and PidsLimit
+ * keeps a fork bomb inside a compromised game server from exhausting the host.
+ * 8192 is far above real usage, but UE5-under-Proton servers run 1-2k threads
+ * and threads count against the limit — hence not lower.
+ */
+function hardenSpec(spec: Docker.ContainerCreateOptions): Docker.ContainerCreateOptions {
+  const host = (spec.HostConfig ??= {});
+  host.SecurityOpt = [...(host.SecurityOpt ?? []), "no-new-privileges:true"];
+  host.PidsLimit ??= 8192;
+  return spec;
+}
+
+function gameSpecFor(input: RuntimeSpecInput): Docker.ContainerCreateOptions {
   if (input.game === Game.ASA) return buildPokSpec(input);
   if (input.game === Game.CONAN) return buildConanSpec(input);
   if (input.game === Game.PALWORLD) return buildPalworldSpec(input);

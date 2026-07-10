@@ -8,11 +8,14 @@ import { AuthService } from "./auth.service";
 function makeService(users: Record<string, { tokenVersion: number }>) {
   const prisma = {
     user: {
-      findUnique: async ({ where }: { where: { id: string } }) =>
-        users[where.id] ? { tokenVersion: users[where.id].tokenVersion } : null,
+      findUnique: async ({ where }: { where: { id: string } }) => {
+        const user = users[where.id];
+        return user ? { tokenVersion: user.tokenVersion } : null;
+      },
       update: async ({ where }: { where: { id: string } }) => {
-        users[where.id].tokenVersion += 1;
-        return users[where.id];
+        const user = users[where.id]!;
+        user.tokenVersion += 1;
+        return user;
       },
     },
   };

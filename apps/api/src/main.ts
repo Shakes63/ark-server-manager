@@ -2,6 +2,7 @@ import "dotenv/config";
 import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
 import { ValidationPipe, Logger } from "@nestjs/common";
+import helmet from "helmet";
 import { AppModule } from "./app.module";
 import { loadEnv } from "./config/env";
 import { installProcessSafetyNet } from "./common/process-safety";
@@ -17,9 +18,15 @@ async function bootstrap() {
   app.useGlobalPipes(
     new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: false }),
   );
-  // LAN-first but reverse-proxy friendly: trust proxy + permissive CORS for the
-  // co-located web app; tighten when exposed (PLANNING.md → Security posture).
-  app.enableCors({ origin: true, credentials: true });
+  // The API serves JSON, not pages — CSP would only constrain error responses,
+  // and HSTS breaks plain-HTTP LAN setups, so both stay off.
+  app.use(helmet({ contentSecurityPolicy: false, strictTransportSecurity: false }));
+  // Browsers reach the API same-origin via the Next rewrite proxy, so
+  // cross-origin is denied unless origins are explicitly allowed via CORS_ORIGINS.
+  app.enableCors({
+    origin: env.CORS_ORIGINS.length > 0 ? env.CORS_ORIGINS : false,
+    credentials: true,
+  });
 
   await app.listen(env.API_PORT, "0.0.0.0");
   new Logger("Bootstrap").log(

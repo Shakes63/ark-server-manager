@@ -1301,3 +1301,29 @@ describe("renderSdtdServerXml", () => {
     expect(xml).toContain('<property name="XPMultiplier" value="100"/>'); // catalog default
   });
 });
+
+// Every game container gets the central hardening injected by buildContainerSpec,
+// regardless of which per-game builder produced the spec.
+describe("container hardening (all games)", () => {
+  it("applies no-new-privileges and a pids limit to every game's spec", async () => {
+    const { buildContainerSpec } = await import("./runtime-spec");
+    for (const game of Object.values(Game)) {
+      const spec = buildContainerSpec({
+        serverId: "srv1",
+        game,
+        map: "map",
+        sessionName: "Hardened",
+        ports: { game: 7777, rawSocket: 7778, query: 7779, rcon: 27020 },
+        maxPlayers: 10,
+        adminPassword: "secret",
+        serverPassword: null,
+        modIds: [],
+        cluster: null,
+        config: { values: {} },
+        catalog: { settings: [] } as never,
+      });
+      expect(spec.HostConfig?.SecurityOpt, game).toContain("no-new-privileges:true");
+      expect(spec.HostConfig?.PidsLimit, game).toBe(8192);
+    }
+  });
+});

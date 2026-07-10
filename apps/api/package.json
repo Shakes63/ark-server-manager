@@ -30,6 +30,7 @@
     "class-validator": "^0.14.1",
     "dockerode": "^4.0.2",
     "dotenv": "^16.4.5",
+    "helmet": "^8.2.0",
     "ini": "^5.0.0",
     "node-cron": "^3.0.3",
     "rcon-client": "^4.2.5",
