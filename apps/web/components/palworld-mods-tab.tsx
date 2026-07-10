@@ -8,11 +8,20 @@ type PalModStatus = {
   framework: { enabled: boolean; preload: string; present: boolean };
 };
 
+/** The only known native-Linux UE4SS build. Official UE4SS releases are Windows-only
+ *  (a dwmapi.dll proxy), so users hunting for a libUE4SS.so on the official repo come
+ *  up empty — link them straight at the experimental Linux fork instead. */
+const UE4SS_LINUX_RELEASE = "https://github.com/Yangff/RE-UE4SS/releases/tag/linux-experiment";
+
 /**
  * Palworld mod management (it's not on Steam Workshop): upload .pak content mods
  * into the bind-mounted Pal/Content/Paks/~mods, and toggle a server-side framework
- * (UE4SS/PalDefender) that's dropped into Pal/Binaries/Linux and loaded via
- * LD_PRELOAD on start. Both take effect on the next restart.
+ * (UE4SS) that's dropped into Pal/Binaries/Linux and loaded via LD_PRELOAD on start.
+ * Both take effect on the next restart.
+ *
+ * This server runs the NATIVE Linux binary, so only Lua/Blueprint mods work.
+ * DLL-based mods (PalGuard, PalDefender) can't load into a Linux process at all —
+ * those need the Windows server under Wine, which this image doesn't run.
  */
 export function PalworldModsTab({ serverId }: { serverId: string }) {
   const [status, setStatus] = useState<PalModStatus | null>(null);
@@ -100,11 +109,27 @@ export function PalworldModsTab({ serverId }: { serverId: string }) {
         <p className="text-[11px] text-slate-500">Restart the server to load mod changes.</p>
       </div>
 
-      {/* ── Server mod framework (UE4SS / PalDefender) ──────────────────── */}
+      {/* ── Server mod framework (UE4SS) ────────────────────────────────── */}
       <div className="card space-y-3">
         <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-ark-accent2">
-          <ShieldCheck className="h-4 w-4" /> Server mod framework (UE4SS / PalDefender)
+          <ShieldCheck className="h-4 w-4" /> Server mod framework (UE4SS)
         </h3>
+
+        <p className="text-[11px] leading-snug text-slate-500">
+          Official UE4SS builds are Windows-only, so there is no{" "}
+          <span className="font-mono">libUE4SS.so</span> on the UE4SS releases page. Use the
+          experimental{" "}
+          <a
+            href={UE4SS_LINUX_RELEASE}
+            target="_blank"
+            rel="noreferrer"
+            className="text-ark-accent hover:underline"
+          >
+            native Linux build
+          </a>{" "}
+          (download <span className="font-mono">UE4SS_0.0.0.zip</span>) and upload it below as-is —
+          it already contains <span className="font-mono">libUE4SS.so</span> at the archive root.
+        </p>
 
         <label className="flex items-center gap-2 text-sm text-slate-200">
           <input
@@ -160,11 +185,23 @@ export function PalworldModsTab({ serverId }: { serverId: string }) {
           </div>
         </div>
 
+        {fw?.enabled && !fw.present && (
+          <p className="rounded border border-amber-500/40 bg-amber-950/30 px-2 py-1.5 text-[11px] leading-snug text-amber-300">
+            The framework is enabled but <span className="font-mono">{fw.preload}</span> isn&apos;t on
+            disk. The server will start without it — upload the framework .zip, or the preload path
+            doesn&apos;t match what the archive contained.
+          </p>
+        )}
+
         <p className="text-[11px] leading-snug text-slate-500">
           This server runs the <span className="text-slate-300">native Linux</span> Palworld binary, so the
           framework must be a Linux build; its files are extracted into{" "}
           <span className="font-mono">Pal/Binaries/Linux</span> and injected via{" "}
-          <span className="font-mono">LD_PRELOAD</span>. Restart the server to apply.
+          <span className="font-mono">LD_PRELOAD</span>. Restart the server to apply.{" "}
+          <span className="text-slate-400">
+            Lua and Blueprint mods work; DLL-based mods (PalGuard, PalDefender) cannot load into a
+            Linux process and need the Windows server under Wine.
+          </span>
         </p>
       </div>
     </div>

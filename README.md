@@ -17,7 +17,7 @@ player administration, and even your router's port-forwards.
 | ARK: Survival Ascended | Proton (POK image) | RCON | CurseForge browser |
 | ARK: Survival Evolved | native | RCON | Steam Workshop browser |
 | Conan Exiles | native | RCON | Steam Workshop browser |
-| Palworld | native | RCON | UE4SS/pak uploader |
+| Palworld | native | RCON | UE4SS (Linux)/pak uploader [^pal] |
 | Minecraft (Java) | native (itzg) | RCON | CurseForge modpacks (auto-install) |
 | Minecraft Bedrock | native (itzg) | — | add-on pack uploader |
 | Icarus | Wine | — | .pak uploader |
@@ -36,6 +36,14 @@ player administration, and even your router's port-forwards.
 | Factorio | native | RCON | mods folder (+ mod-portal auto-update) |
 | Rust | native | RCON | Oxide/uMod toggle (plugins folder) |
 | BeamNG.drive (BeamMP) | native | — | client-mod + Lua plugin folders |
+
+[^pal]: Palworld runs the **native Linux** server, so mods are `.pak` content mods plus
+    Lua/Blueprint mods loaded by UE4SS. Official UE4SS releases are Windows-only — there is no
+    `libUE4SS.so` there. Use the experimental
+    [native Linux build](https://github.com/Yangff/RE-UE4SS/releases/tag/linux-experiment)
+    (`UE4SS_0.0.0.zip`) and upload it in the server's Mods tab. DLL-based mods (PalGuard,
+    PalDefender) cannot load into a Linux process; those require running the Windows server
+    under Wine, which this image does not do.
 
 **Feature highlights**
 

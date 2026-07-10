@@ -462,9 +462,10 @@ function buildPalworldSpec(input: RuntimeSpecInput): Docker.ContainerCreateOptio
     `UPDATE_ON_BOOT=false`,
     `BACKUP_ENABLED=false`,
     `AUTO_REBOOT_ENABLED=false`,
-    // Server-side mod framework (UE4SS/PalDefender): when enabled, preload its
-    // loader so the native-Linux server injects it. The framework files live in the
-    // bind-mounted Pal/Binaries/Linux (managed via the Mods tab / PalModsService).
+    // Server-side mod framework (UE4SS): when enabled, preload its loader so the
+    // native-Linux server injects it. The framework files live in the bind-mounted
+    // Pal/Binaries/Linux (managed via the Mods tab / PalModsService). Only Lua/BP
+    // mods load this way — DLL mods would need the Windows server under Wine.
     ...(input.config.values?.["_palFramework"]
       ? [
           `LD_PRELOAD=${PALWORLD_DATA_DIR}/${

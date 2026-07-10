@@ -10,14 +10,20 @@ import { LocalPaths } from "../common/paths";
 
 const execFileP = promisify(execFile);
 
-/** UE4SS/PalDefender drop their loader here; the server is launched with this on
- *  LD_PRELOAD (set by buildPalworldSpec when the framework is enabled). */
+/** UE4SS drops its loader here; the server is launched with this on LD_PRELOAD
+ *  (set by buildPalworldSpec when the framework is enabled). Official UE4SS is
+ *  Windows-only — the Linux .so comes from the experimental fork
+ *  https://github.com/Yangff/RE-UE4SS/releases/tag/linux-experiment (libUE4SS.so
+ *  sits at the archive root, so extracting into Pal/Binaries/Linux lands it here). */
 export const PAL_FRAMEWORK_DEFAULT_PRELOAD = "Pal/Binaries/Linux/libUE4SS.so";
 
 /**
  * Palworld isn't on Steam Workshop, so mods are managed as files in the bind-mounted
  * instance dir: .pak content mods in Pal/Content/Paks/~mods, and a server-side mod
- * framework (UE4SS / PalDefender) in Pal/Binaries/Linux loaded via LD_PRELOAD.
+ * framework (UE4SS) in Pal/Binaries/Linux loaded via LD_PRELOAD.
+ *
+ * We run the native Linux binary, so only Lua/Blueprint mods load. DLL-based mods
+ * (PalGuard, PalDefender) need the Windows server under Wine and cannot work here.
  */
 @Injectable()
 export class PalModsService {
