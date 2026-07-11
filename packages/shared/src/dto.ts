@@ -13,6 +13,9 @@ export interface ServerSummary {
   ports: PortSet;
   installedBuildId?: string | null;
   updateAvailable: boolean;
+  /** One or more installed mods have a newer version available (Valheim/Thunderstore
+   *  or a pinned Minecraft/CurseForge modpack). Refreshed by the mod-update poller. */
+  modUpdateAvailable: boolean;
   /** The game's server image is already pulled locally — "Install" (an image
    *  pull) would be a no-op, so the UI disables it. Game files install on Start. */
   imageReady: boolean;

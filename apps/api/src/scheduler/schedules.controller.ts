@@ -7,7 +7,7 @@ class ScheduleBody {
   @IsString() serverId!: string;
   @IsString() name!: string;
   @IsString() cron!: string;
-  @IsIn(["restart", "update", "update-if-available", "backup", "stop", "start"]) action!: string;
+  @IsIn(["restart", "update", "update-if-available", "update-mods", "backup", "stop", "start"]) action!: string;
   @IsOptional() @IsInt() @Min(0) warnMinutes?: number;
   @IsOptional() @IsBoolean() enabled?: boolean;
   /** Skip disruptive actions (restart/update/stop) while players are online. */

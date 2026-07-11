@@ -10,6 +10,7 @@ import { BackupsService } from "../backups/backups.service";
 import { ManagerSettingsService } from "../manager-settings/manager-settings.service";
 import { PlayersService } from "../players/players.service";
 import { UpdatesService } from "../updates/updates.service";
+import { ModUpdatesService } from "../modupdates/modupdates.service";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -33,6 +34,7 @@ export class SchedulerService implements OnModuleInit {
     private readonly settings: ManagerSettingsService,
     private readonly players: PlayersService,
     private readonly updates: UpdatesService,
+    private readonly modUpdates: ModUpdatesService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -143,7 +145,23 @@ export class SchedulerService implements OnModuleInit {
       action = "update";
     }
 
-    const disruptive = ["restart", "update", "stop"].includes(action);
+    // "update-mods" only disrupts if there's actually something to update — check
+    // first so a nightly schedule doesn't warn players + snapshot + restart for
+    // nothing. A source hiccup (null) falls through to updating, so the schedule
+    // can't go permanently dead on a detection failure.
+    if (action === "update-mods") {
+      const pending = await this.modUpdates.status(sched.serverId).catch(() => null);
+      if (pending && pending.count === 0) {
+        await this.events.emit({
+          type: EventType.ScheduleFired,
+          message: `Schedule "${sched.name}" skipped — mods already up to date`,
+          serverId: sched.serverId,
+        });
+        return;
+      }
+    }
+
+    const disruptive = ["restart", "update", "update-mods", "stop"].includes(action);
     try {
       if (disruptive && sched.skipIfPlayersOnline) {
         // Don't interrupt a live session: skip this firing when anyone is online.
@@ -186,6 +204,13 @@ export class SchedulerService implements OnModuleInit {
           await this.servers.stop(sched.serverId).catch(() => undefined);
           await this.installer.install(server.game as Game, { serverId: sched.serverId });
           if (wasUp) await this.servers.start(sched.serverId);
+          break;
+        }
+        case "update-mods": {
+          // Apply pending mod updates (files/config on disk), then restart to load
+          // them if the server was up. updateAll owns the was-it-running decision.
+          const result = await this.modUpdates.updateAll(sched.serverId);
+          if (result.restartNeeded) await this.servers.restart(sched.serverId);
           break;
         }
       }

@@ -99,15 +99,47 @@ export function ValheimModsTab({ serverId }: { serverId: string }) {
     }
   };
 
+  const outdated = (status?.mods ?? []).filter((m) => m.updateAvailable);
+  const [updatingAll, setUpdatingAll] = useState(false);
+  const updateAll = async () => {
+    setUpdatingAll(true);
+    setErr(null);
+    try {
+      await apiPost(`/servers/${serverId}/mod-updates/apply`);
+      loadStatus();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setUpdatingAll(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       {err && <div className="card border-rose-500/40 text-sm text-rose-300">{err}</div>}
 
       {/* Installed */}
       <div className="card space-y-3">
-        <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-ark-accent2">
-          <Package className="h-4 w-4" /> Installed mods {status && `(${status.mods.length})`}
-        </h3>
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-ark-accent2">
+            <Package className="h-4 w-4" /> Installed mods {status && `(${status.mods.length})`}
+          </h3>
+          {outdated.length > 0 && (
+            <button
+              className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-medium text-amber-300 hover:bg-amber-500/25 disabled:opacity-50"
+              disabled={updatingAll || installing !== null}
+              onClick={updateAll}
+            >
+              {updatingAll ? (
+                <span className="inline-flex items-center gap-1">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Updating…
+                </span>
+              ) : (
+                `Update all (${outdated.length})`
+              )}
+            </button>
+          )}
+        </div>
         {status && status.mods.length > 0 ? (
           <ul className="divide-y divide-ark-border/50 text-sm">
             {status.mods.map((m) => (

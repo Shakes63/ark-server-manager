@@ -25,6 +25,11 @@ const ACTIONS: { value: string; label: string; hint: string }[] = [
     label: "Update if available",
     hint: "Check Steam for a new build first — update + restart only when one exists (no downtime otherwise).",
   },
+  {
+    value: "update-mods",
+    label: "Update mods",
+    hint: "Update installed mods (Valheim/Thunderstore or a pinned Minecraft modpack), then restart — only when an update exists.",
+  },
   { value: "stop", label: "Stop", hint: "Shut the server down." },
   { value: "start", label: "Start", hint: "Bring the server up." },
 ];
@@ -36,7 +41,7 @@ const FREQS: { value: Frequency; label: string }[] = [
   { value: "everyN", label: "Every few hours" },
 ];
 const DAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
-const DISRUPTIVE = new Set(["restart", "update", "update-if-available", "stop"]);
+const DISRUPTIVE = new Set(["restart", "update", "update-if-available", "update-mods", "stop"]);
 const actionLabel = (a: string) => ACTIONS.find((x) => x.value === a)?.label ?? a;
 
 export function ScheduleList({ serverId }: { serverId: string }) {

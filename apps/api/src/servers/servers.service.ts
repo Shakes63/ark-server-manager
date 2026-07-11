@@ -1531,6 +1531,7 @@ export class ServersService implements OnApplicationBootstrap {
       ports: this.portsOf(row) ?? DEFAULT_PORTS,
       installedBuildId: row.installedBuildId,
       updateAvailable: row.updateAvailable,
+      modUpdateAvailable: row.modUpdateAvailable,
       imageReady,
       configDirty: row.configDirty,
       joinPassword,

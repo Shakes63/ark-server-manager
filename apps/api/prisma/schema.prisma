@@ -73,6 +73,9 @@ model Server {
   containerId      String?
   installedBuildId String?
   updateAvailable  Boolean @default(false)
+  // True when an installed mod (Valheim/Thunderstore or a pinned Minecraft modpack)
+  // has a newer version — set by the mod-update poller (ModUpdatesService).
+  modUpdateAvailable Boolean @default(false)
   // True when settings changed after the running container was created, so the
   // UI can offer a Restart (to apply them) instead of a disabled Start.
   configDirty      Boolean @default(false)
