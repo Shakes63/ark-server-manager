@@ -187,6 +187,7 @@ async function makeService(row: ServerRow, docker: FakeDocker) {
     { create: noop } as never,
     { count: async () => ({ online: 0 }) } as never,
     configWriter,
+    { getAll: async () => ({}) } as never, // artwork
   );
   return { service, prisma, sm };
 }

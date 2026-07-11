@@ -66,6 +66,7 @@ function makeSvc(overrides: Record<string, unknown> = {}) {
     {} as never, // backups
     { cached: () => null } as never, // players
     { writeInis: async () => undefined } as never, // configWriter
+    { getAll: async () => ({}) } as never, // artwork
   );
   const dataOf = () => prisma.server.update.mock.calls[0]![0].data as Record<string, unknown>;
   return { svc, dataOf };

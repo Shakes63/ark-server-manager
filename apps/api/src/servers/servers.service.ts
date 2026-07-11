@@ -37,6 +37,7 @@ import { RealtimeGateway } from "../realtime/realtime.gateway";
 import { DockerService } from "../docker/docker.service";
 import { CatalogService } from "../catalog/catalog.service";
 import { ServerConfigWriter } from "./config-writer.service";
+import { ArtworkService } from "../artwork/artwork.service";
 import { InstallerService } from "../installer/installer.service";
 import { RconService } from "../rcon/rcon.service";
 import { StateMachineService } from "./state-machine.service";
@@ -205,6 +206,7 @@ export class ServersService implements OnApplicationBootstrap {
     private readonly backups: BackupsService,
     private readonly players: PlayersService,
     private readonly configWriter: ServerConfigWriter,
+    private readonly artwork: ArtworkService,
   ) {}
 
   /** The captured log / console for the current run (survives refresh + tab
@@ -940,6 +942,11 @@ export class ServersService implements OnApplicationBootstrap {
       });
     }
 
+    // Unraid dashboard icon: per-server pick, else the game's SGDB default.
+    const override = server.artworkJson ? (JSON.parse(server.artworkJson) as GameArtwork) : null;
+    const gameArt = (await this.artwork.getAll().catch(() => ({}) as Partial<Record<Game, GameArtwork>>))[game];
+    const iconUrl = override?.icon ?? gameArt?.icon ?? null;
+
     return buildContainerSpec({
       serverId: server.id,
       game,
@@ -967,6 +974,7 @@ export class ServersService implements OnApplicationBootstrap {
       curseForgeApiKey:
         game === Game.MINECRAFT ? await this.settings.get(SettingKeys.CurseForgeApiKey) : null,
       pzModNames,
+      iconUrl,
     });
   }
 

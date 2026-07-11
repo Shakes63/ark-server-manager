@@ -75,6 +75,9 @@ export interface RuntimeSpecInput {
   curseForgeApiKey?: string | null;
   /** Zomboid only: the in-game "Mod ID" names (Mods=) matching modIds (WorkshopItems=). */
   pzModNames?: string[];
+  /** Square icon for the Unraid Docker dashboard (per-server pick or SGDB game
+   *  default); falls back to the game's Steam header when absent. */
+  iconUrl?: string | null;
 }
 
 /** Build the Docker create spec for a game-server container. */
@@ -133,7 +136,9 @@ function serverLabels(input: RuntimeSpecInput, baseUrl: string): Record<string, 
     "ark.role": "server",
     "ark.serverId": input.serverId,
     "ark.game": input.game,
-    "net.unraid.docker.icon": GAME_ICONS[input.game],
+    // SteamGridDB square icon (per-server pick or game default) beats the wide
+    // Steam header.jpg that Unraid squishes into its square dashboard slot.
+    "net.unraid.docker.icon": input.iconUrl || GAME_ICONS[input.game],
     "net.unraid.docker.webui": `${baseUrl}/servers/${input.serverId}`,
   };
 }

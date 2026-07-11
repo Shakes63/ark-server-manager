@@ -1,5 +1,6 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeAll } from "vitest";
 import { ServersService } from "./servers.service";
+import { CatalogService } from "../catalog/catalog.service";
 
 /**
  * setArtwork merges per-kind overrides. Regression: the validated DTO instance
@@ -8,6 +9,12 @@ import { ServersService } from "./servers.service";
  * (picking a banner wiped the cover). Absent/undefined kinds must be ignored;
  * explicit null clears a kind; clearing the last kind stores NULL, not "{}".
  */
+beforeAll(() => {
+  process.env.SECRETS_KEY = "a".repeat(64);
+  process.env.JWT_SECRET = "test-jwt-secret-1234";
+  process.env.DATA_DIR = "/tmp/palisade-artwork-test";
+});
+
 function makeSvc(initialArtworkJson: string | null = null) {
   const row: Record<string, unknown> = {
     id: "s1",
@@ -54,15 +61,16 @@ function makeSvc(initialArtworkJson: string | null = null) {
     {} as never,
     {} as never,
     docker as never,
+    new CatalogService(),
     {} as never,
     {} as never,
     {} as never,
-    {} as never,
-    {} as never,
+    { getTimezone: async () => "UTC", get: async () => null } as never, // settings
     {} as never,
     {} as never,
     players as never,
     {} as never,
+    { getAll: async () => ({}) } as never, // artwork
   );
   return { svc, row };
 }
@@ -96,5 +104,19 @@ describe("setArtwork", () => {
     const after = await svc.setArtwork("s1", dtoBody({ grid: null }));
     expect(after.artwork).toBeNull();
     expect(row.artworkJson).toBeNull();
+  });
+});
+
+describe("Unraid icon label", () => {
+  it("assembleSpec uses the per-server icon override for net.unraid.docker.icon", async () => {
+    const { svc } = makeSvc(JSON.stringify({ icon: "https://cdn/icon.png" }));
+    const spec = await (svc as unknown as { specForServer(id: string): Promise<{ Labels: Record<string, string> }> }).specForServer("s1");
+    expect(spec.Labels["net.unraid.docker.icon"]).toBe("https://cdn/icon.png");
+  });
+
+  it("falls back to the Steam header when no icon anywhere", async () => {
+    const { svc } = makeSvc(null);
+    const spec = await (svc as unknown as { specForServer(id: string): Promise<{ Labels: Record<string, string> }> }).specForServer("s1");
+    expect(spec.Labels["net.unraid.docker.icon"]).toContain("steamstatic.com");
   });
 });

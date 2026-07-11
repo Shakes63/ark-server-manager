@@ -7,5 +7,6 @@ import { ManagerSettingsModule } from "../manager-settings/manager-settings.modu
   imports: [ManagerSettingsModule],
   controllers: [ArtworkController],
   providers: [ArtworkService],
+  exports: [ArtworkService],
 })
 export class ArtworkModule {}
