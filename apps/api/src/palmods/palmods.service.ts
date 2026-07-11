@@ -1,15 +1,12 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { mkdir, readdir, readFile, rm, writeFile, stat } from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import { tmpdir } from "node:os";
 import { join, basename } from "node:path";
 import { Game, type ServerConfigValues } from "@ark/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { LocalPaths } from "../common/paths";
+import { extractZipSafe } from "../common/safe-extract";
 
-const execFileP = promisify(execFile);
 
 /** UE4SS drops its loader here; the server is launched with this on LD_PRELOAD
  *  (set by buildPalworldSpec when the framework is enabled). Official UE4SS is
@@ -232,14 +229,7 @@ export class PalModsService {
   }
 
   private async extractZip(data: Buffer, dest: string) {
-    const tmp = join(tmpdir(), `palmod-upload-${process.pid}-${Date.now()}.zip`);
-    await writeFile(tmp, data);
-    try {
-      await execFileP("unzip", ["-o", tmp, "-d", dest]);
-    } catch (e) {
-      throw new BadRequestException(`Could not unzip the upload: ${(e as Error).message}`);
-    } finally {
-      await rm(tmp, { force: true }).catch(() => undefined);
-    }
+    // Untrusted upload / downloaded framework → traversal-safe extraction.
+    await extractZipSafe(data, dest);
   }
 }

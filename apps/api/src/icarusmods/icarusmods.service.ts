@@ -1,14 +1,11 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import { tmpdir } from "node:os";
 import { join, basename } from "node:path";
 import { Game } from "@ark/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { LocalPaths } from "../common/paths";
+import { extractZipSafe } from "../common/safe-extract";
 
-const execFileP = promisify(execFile);
 
 /** Where the mornedhels image expects Icarus mods, relative to the instance root
  *  (the game files are bound under gamefiles/; the server install lives at
@@ -69,14 +66,7 @@ export class IcarusModsService {
   }
 
   private async extractZip(data: Buffer, dest: string) {
-    const tmp = join(tmpdir(), `icarusmod-upload-${process.pid}-${Date.now()}.zip`);
-    await writeFile(tmp, data);
-    try {
-      await execFileP("unzip", ["-o", tmp, "-d", dest]);
-    } catch (e) {
-      throw new BadRequestException(`Could not unzip the upload: ${(e as Error).message}`);
-    } finally {
-      await rm(tmp, { force: true }).catch(() => undefined);
-    }
+    // Untrusted upload → traversal-safe extraction (rejects ../ + absolute, strips symlinks).
+    await extractZipSafe(data, dest);
   }
 }

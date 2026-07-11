@@ -146,3 +146,42 @@ describe("restart", () => {
     expect(docker.started).toEqual(["container-1"]);
   });
 });
+
+// Security regression guard: every game's container spec must keep the hardening
+// invariants. Adding a game (or editing a spec builder) that silently drops one is a
+// red build here — a dropped cap or a docker.sock mount reads as "still works" because
+// the container runs fine, just less safely. Mirrors the reliability chaos harness.
+describe("container hardening invariants (every game)", () => {
+  const RAM = 4096;
+
+  it("keeps no-new-privileges (except the exact POK exempt set), pids/mem caps, no auto-restart, and never mounts docker.sock", async () => {
+    const missingNnp: string[] = [];
+    for (const game of Object.values(Game)) {
+      const d = new FakeDocker();
+      const row = makeRow({ game, map: "map", id: `harden-${game}`, ramLimitMb: RAM });
+      const { service } = await makeService(row, d);
+      await startServer(service, row.id);
+      const host = (d.createdSpecs[0] as { HostConfig: Record<string, unknown> }).HostConfig;
+
+      const secOpt = (host.SecurityOpt as string[] | undefined) ?? [];
+      if (!secOpt.includes("no-new-privileges:true")) missingNnp.push(game);
+
+      expect(host.PidsLimit, `${game}: PidsLimit must be set`).toBeGreaterThan(0);
+      // The manager's watchdog owns restarts — a Docker restart policy would fight it.
+      expect((host.RestartPolicy as { Name?: string })?.Name, `${game}: RestartPolicy`).toBe("no");
+      // RAM cap honored, or one server can OOM the whole box.
+      expect(host.Memory, `${game}: RAM cap`).toBe(RAM * 1024 * 1024);
+      // THE critical one: a game container must NEVER see the Docker socket (that's a
+      // host-root escape). The manager talks to Docker via the socket-proxy only.
+      for (const bind of (host.Binds as string[] | undefined) ?? []) {
+        expect(bind, `${game}: must not bind the docker socket`).not.toMatch(
+          /docker\.sock|\/var\/run\/docker/,
+        );
+      }
+    }
+    // The no-new-privileges exemption is EXACTLY the two POK images (their entrypoints
+    // sudo, which the flag breaks even as root). A new game landing in this list must
+    // be a deliberate, reviewed decision — not an accident.
+    expect(missingNnp.sort()).toEqual([Game.ASA, Game.CONAN].sort());
+  });
+});
