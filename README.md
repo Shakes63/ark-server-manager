@@ -18,6 +18,7 @@ player administration, and even your router's port-forwards.
 | ARK: Survival Evolved | native | RCON | Steam Workshop browser |
 | Conan Exiles | native | RCON | Steam Workshop browser |
 | Palworld | native | RCON | UE4SS (Linux)/pak uploader [^pal] |
+| Palworld (Wine — full mods) | Wine (ripps818) | RCON | UE4SS (Windows) + DLL mods/pak uploader [^palwine] |
 | Minecraft (Java) | native (itzg) | RCON | CurseForge modpacks (auto-install) |
 | Minecraft Bedrock | native (itzg) | — | add-on pack uploader |
 | Icarus | Wine | — | .pak uploader |
@@ -44,6 +45,13 @@ player administration, and even your router's port-forwards.
     (`UE4SS_0.0.0.zip`) and upload it in the server's Mods tab. DLL-based mods (PalGuard,
     PalDefender) cannot load into a Linux process; those require running the Windows server
     under Wine, which this image does not do.
+
+[^palwine]: The **Palworld (Wine — full mods)** variant runs the **Windows** server under Wine,
+    so DLL-based mods (PalGuard, PalDefender) load alongside Lua/Blueprint and `.pak` mods. The
+    Mods tab installs the official
+    [UE4SS Windows build](https://github.com/UE4SS-RE/RE-UE4SS/releases/tag/v3.0.1) into
+    `Pal/Binaries/Win64`, where Wine auto-loads it via the `dwmapi.dll` proxy — no LD_PRELOAD.
+    Heavier and crashier than the native variant; pick it only when you need DLL mods.
 
 **Feature highlights**
 
@@ -322,6 +330,7 @@ wouldn't exist without them:
 | Conan Exiles | `acekorneya/conan_enhanced_server` | [Acekorneya (POK)](https://github.com/Acekorneya/POK_Conan_Enhanced_Docker_server) |
 | ARK: Survival Evolved | `hermsi/ark-server` | [Hermsi1337](https://github.com/Hermsi1337/docker-ark-server) |
 | Palworld | `thijsvanloef/palworld-server-docker` | [Thijs van Loef](https://github.com/thijsvanloef/palworld-server-docker) |
+| Palworld (Wine — full mods) | `ripps818/docker-palworld-dedicated-server-wine` | [ripps818](https://github.com/ripps818/docker-palworld-dedicated-server) |
 | Minecraft (Java) | `itzg/minecraft-server` | [itzg (Geoff Bourne)](https://github.com/itzg/docker-minecraft-server) |
 | Minecraft Bedrock | `itzg/minecraft-bedrock-server` | [itzg (Geoff Bourne)](https://github.com/itzg/docker-minecraft-bedrock-server) |
 | Icarus | `mornedhels/icarus-server` | [mornedhels](https://github.com/mornedhels/icarus-server) |
