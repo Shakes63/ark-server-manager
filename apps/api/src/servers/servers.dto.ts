@@ -7,9 +7,15 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  Matches,
   Min,
 } from "class-validator";
 import { Game } from "@ark/shared";
+import { IMAGE_TAG_RE } from "../common/images";
+
+/** Reusable: an optional, validated Docker image tag (null clears the pin). */
+const ImageTagField = () =>
+  Matches(IMAGE_TAG_RE, { message: "imageTag must be a valid Docker tag (letters, digits, . _ -)" });
 
 export class CreateServerBody {
   @IsString() name!: string;
@@ -24,6 +30,8 @@ export class CreateServerBody {
   @IsOptional() @IsString() serverPassword?: string;
   @IsOptional() @IsString() spectatorPassword?: string;
   @IsOptional() @IsObject() config?: Record<string, unknown>;
+  /** Advanced: pin the game image to a specific tag instead of the shipped default. */
+  @IsOptional() @ImageTagField() imageTag?: string | null;
   /** Import only: host path of an existing Saved dir to copy in. */
   @IsOptional() @IsString() savedSourcePath?: string;
 }
@@ -44,6 +52,8 @@ export class UpdateServerBody {
   @IsOptional() @IsString() serverPassword?: string;
   @IsOptional() @IsString() spectatorPassword?: string;
   @IsOptional() @IsObject() config?: Record<string, unknown>;
+  /** Advanced: pin the game image to a specific tag (null clears the pin). */
+  @IsOptional() @ImageTagField() imageTag?: string | null;
 }
 
 export class RconBody {

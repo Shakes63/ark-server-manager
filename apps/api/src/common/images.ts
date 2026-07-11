@@ -183,6 +183,38 @@ export const RUST_DATA_DIR = "/steamcmd/rust";
 
 /** BeamMP (rouhim): client-mod zips (maps/vehicles sent to joiners) + server-side
  *  Lua plugins. There's no world state — these ARE the persistent data. */
+/** A valid Docker image tag: starts with a word char, then word chars / . / - (max 128).
+ *  Used to validate a user-pinned tag before it's spliced into an image ref. */
+export const IMAGE_TAG_RE = /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/;
+
+/** Split a full image ref ("repo:tag") into repo + tag. The tag separator is the LAST
+ *  colon after the last slash — a registry-port colon (e.g. "host:5000/repo") comes
+ *  before the slash and must not be mistaken for a tag. */
+export function splitImageRef(ref: string): { repo: string; tag: string } {
+  const colon = ref.lastIndexOf(":");
+  const slash = ref.lastIndexOf("/");
+  if (colon > slash) return { repo: ref.slice(0, colon), tag: ref.slice(colon + 1) };
+  return { repo: ref, tag: "latest" };
+}
+
+/** The image repository for a game (no tag), e.g. "ich777/openttdserver". */
+export function imageRepoFor(game: Game): string {
+  return splitImageRef(IMAGES[game]).repo;
+}
+
+/** The default (shipped) image tag for a game, e.g. "latest" or "2_1_latest". */
+export function defaultImageTagFor(game: Game): string {
+  return splitImageRef(IMAGES[game]).tag;
+}
+
+/** The image ref to actually run: the game's repo with its tag replaced by `pinned`
+ *  when the server pins one, else the shipped default tag. */
+export function imageRefFor(game: Game, pinned?: string | null): string {
+  const { repo, tag } = splitImageRef(IMAGES[game]);
+  const t = pinned?.trim();
+  return `${repo}:${t && IMAGE_TAG_RE.test(t) ? t : tag}`;
+}
+
 export const BEAMMP_CLIENT_MODS_DIR = "/beammp/Resources/Client";
 export const BEAMMP_SERVER_MODS_DIR = "/beammp/Resources/Server";
 // OpenTTD (ich777): DATA_DIR is /serverdata; SERVER_DIR is /serverdata/serverfiles, with

@@ -18,6 +18,7 @@ import { ServerAccessCard } from "@/components/server-access-card";
 import { AccessListsCard } from "@/components/access-lists-card";
 import { PortsCard } from "@/components/ports-card";
 import { GeneralCard } from "@/components/general-card";
+import { ImageVersionCard } from "@/components/image-version-card";
 import { PortForwardsCard } from "@/components/port-forwards-card";
 import { LogsTab } from "@/components/logs-tab";
 import { ScheduleList } from "@/components/schedule-list";
@@ -575,6 +576,7 @@ function Overview({ server, onChanged }: { server: ServerSummary; onChanged: () 
       <GeneralCard server={server} onSaved={onChanged} />
       <ServerAccessCard server={server} onSaved={onChanged} />
       {!isCoreKeeper && <PortsCard server={server} onSaved={onChanged} />}
+      <ImageVersionCard server={server} onSaved={onChanged} />
       {!isCoreKeeper && <PortForwardsCard serverId={server.id} />}
       {/* File-managed access lists (Valheim/Bedrock/7DTD); RCON games use the Console. */}
       {(isValheim || isBedrock || isSdtd) && <AccessListsCard serverId={server.id} />}

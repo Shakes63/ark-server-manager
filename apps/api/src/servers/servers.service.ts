@@ -524,6 +524,7 @@ export class ServersService implements OnApplicationBootstrap {
           modIds: JSON.stringify(dto.modIds ?? []),
           ramLimitMb: dto.ramLimitMb ?? null,
           cpuLimit: dto.cpuLimit ?? null,
+          imageTag: dto.imageTag && dto.imageTag.trim() ? dto.imageTag.trim() : null,
         },
         include: { cluster: true },
       });
@@ -584,6 +585,15 @@ export class ServersService implements OnApplicationBootstrap {
     if (dto.maxPlayers !== undefined && dto.maxPlayers !== existing.maxPlayers) {
       data.maxPlayers = dto.maxPlayers;
       launchChanged = true;
+    }
+    // Advanced: pin/unpin the game image tag. Applied on the next start (pull +
+    // recreate), so it counts as a launch change → prompts a Restart when running.
+    if (dto.imageTag !== undefined) {
+      const tag = dto.imageTag && dto.imageTag.trim() ? dto.imageTag.trim() : null;
+      if (tag !== existing.imageTag) {
+        data.imageTag = tag;
+        launchChanged = true;
+      }
     }
     // Ports: editable only while the server is down (they're baked into the container
     // port bindings + rendered configs). Changing the game port also moves its
@@ -1056,6 +1066,7 @@ export class ServersService implements OnApplicationBootstrap {
         game === Game.MINECRAFT ? await this.settings.get(SettingKeys.CurseForgeApiKey) : null,
       pzModNames,
       iconUrl,
+      imageTag: server.imageTag,
     });
   }
 
@@ -1533,6 +1544,7 @@ export class ServersService implements OnApplicationBootstrap {
       installedBuildId: row.installedBuildId,
       updateAvailable: row.updateAvailable,
       modUpdateAvailable: row.modUpdateAvailable,
+      imageTag: row.imageTag,
       imageReady,
       configDirty: row.configDirty,
       joinPassword,

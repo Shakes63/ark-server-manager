@@ -16,6 +16,8 @@ export interface ServerSummary {
   /** One or more installed mods have a newer version available (Valheim/Thunderstore
    *  or a pinned Minecraft/CurseForge modpack). Refreshed by the mod-update poller. */
   modUpdateAvailable: boolean;
+  /** Advanced: pinned game-image tag, or null to use the shipped default. */
+  imageTag?: string | null;
   /** The game's server image is already pulled locally — "Install" (an image
    *  pull) would be a no-op, so the UI disables it. Game files install on Start. */
   imageReady: boolean;
@@ -103,6 +105,20 @@ export interface HostStats {
 /** A single server's stats plus the host totals (the detail endpoint). */
 export type ServerStatsDetail = ServerStats & { host: HostStats };
 
+/** One available image tag from the registry. */
+export interface ImageTag {
+  name: string;
+  /** Last-pushed time (Docker Hub only; GHCR doesn't expose it cheaply). */
+  updatedAt?: string | null;
+}
+
+/** Available image tags for a game, for the advanced version picker. */
+export interface ImageTagsResult {
+  repo: string; // e.g. "ich777/openttdserver"
+  defaultTag: string; // the tag Palisade ships with
+  tags: ImageTag[]; // newest-first where the registry provides ordering
+}
+
 export interface CreateServerDto {
   name: string;
   game: Game;
@@ -117,6 +133,9 @@ export interface CreateServerDto {
   serverPassword?: string;
   spectatorPassword?: string;
   config?: ServerConfigValues;
+  /** Advanced: pin the game image to a specific tag instead of the shipped default
+   *  (null clears the pin). Applied on the next start (pull + recreate). */
+  imageTag?: string | null;
 }
 
 export type UpdateServerDto = Partial<CreateServerDto> & {

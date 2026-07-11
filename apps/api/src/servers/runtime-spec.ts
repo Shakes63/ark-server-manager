@@ -14,6 +14,7 @@ import { ENSHROUDED_MINUTE_NS_KEYS } from "../catalog/enshrouded.catalog";
 import { HostPaths, ContainerPaths } from "../common/paths";
 import {
   IMAGES,
+  imageRefFor,
   POK_DATA_DIR,
   HERMSI_VOLUME,
   CONAN_DATA_DIR,
@@ -79,11 +80,18 @@ export interface RuntimeSpecInput {
   /** Square icon for the Unraid Docker dashboard (per-server pick or SGDB game
    *  default); falls back to the game's Steam header when absent. */
   iconUrl?: string | null;
+  /** Advanced: pin the game image to a specific tag (e.g. a prior version) instead of
+   *  the shipped default. Invalid/blank falls back to the default tag. */
+  imageTag?: string | null;
 }
 
 /** Build the Docker create spec for a game-server container. */
 export function buildContainerSpec(input: RuntimeSpecInput): Docker.ContainerCreateOptions {
-  return hardenSpec(gameSpecFor(input), input.game);
+  const spec = hardenSpec(gameSpecFor(input), input.game);
+  // Each game spec sets Image to its shipped default; apply a pinned tag here (one
+  // choke point) so an advanced user can run a specific version.
+  spec.Image = imageRefFor(input.game, input.imageTag);
+  return spec;
 }
 
 /**
