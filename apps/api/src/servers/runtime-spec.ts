@@ -43,6 +43,7 @@ import {
   RUST_DATA_DIR,
   BEAMMP_CLIENT_MODS_DIR,
   BEAMMP_SERVER_MODS_DIR,
+  OPENTTD_DATA_DIR,
 } from "../common/images";
 // (ATS reuses the ich777 wrapper mount points LIF_STEAMCMD_DIR / LIF_SERVERFILES_DIR.)
 import { ZOMBOID_STEAM_PORTS } from "../catalog/ports";
@@ -134,6 +135,7 @@ function gameSpecFor(input: RuntimeSpecInput): Docker.ContainerCreateOptions {
   if (input.game === Game.FACTORIO) return buildFactorioSpec(input);
   if (input.game === Game.RUST) return buildRustSpec(input);
   if (input.game === Game.BEAMMP) return buildBeammpSpec(input);
+  if (input.game === Game.OPENTTD) return buildOpenttdSpec(input);
   return buildAseSpec(input);
 }
 
@@ -2062,6 +2064,57 @@ function buildAtsSpec(input: RuntimeSpecInput): Docker.ContainerCreateOptions {
   };
 }
 
+/**
+ * OpenTTD (ich777). Env-light: the image downloads OpenTTD on first start and reads
+ * server config from the three cfg files the config-writer renders under
+ * serverfiles/.config/openttd. The whole instance dir binds to the image's DATA_DIR.
+ * The game port carries both TCP (clients) and UDP (server-browser query).
+ */
+function buildOpenttdSpec(input: RuntimeSpecInput): Docker.ContainerCreateOptions {
+  const env = loadEnv();
+  const { ports } = input;
+  const name = containerName(input.serverId, input.game, input.sessionName);
+
+  const openttdEnv = [
+    `TZ=${input.timezone || env.TZ}`,
+    `GAME_PORT=${ports.game}`,
+    `GAME_PARAMS=`,
+    `GAME_VERSION=latest`,
+    `GFX_PK_V=latest`,
+    // Skip the gotty web console — it hard-codes host:8080 under host networking, a
+    // common conflict. OpenTTD admins use the in-game console (rcon_password).
+    `ENABLE_WEBCONSOLE=false`,
+    `UID=${env.PUID}`,
+    `GID=${env.PGID}`,
+  ];
+
+  const binds = [`${HostPaths.instanceRoot(input.serverId)}:${OPENTTD_DATA_DIR}`];
+  const hostNet = env.GAME_HOST_NETWORK;
+  const portEntries = [portKey(ports.game, "tcp"), portKey(ports.game, "udp")];
+  return {
+    name,
+    Image: IMAGES[input.game],
+    Hostname: name,
+    Env: openttdEnv,
+    Labels: serverLabels(input, env.PUBLIC_BASE_URL),
+    ...(hostNet ? {} : { ExposedPorts: Object.fromEntries(portEntries.map((k) => [k, {}])) }),
+    HostConfig: {
+      Binds: binds,
+      ...(hostNet
+        ? { NetworkMode: "host" }
+        : {
+            PortBindings: Object.fromEntries(
+              portEntries.map((k) => [k, [{ HostPort: String(ports.game) }]]),
+            ),
+          }),
+      RestartPolicy: { Name: "no" }, // manager watchdog owns restarts
+      Memory: input.ramLimitMb ? input.ramLimitMb * 1024 * 1024 : undefined,
+      NanoCpus: input.cpuLimit ? Math.round(input.cpuLimit * 1e9) : undefined,
+    },
+    ...(hostNet ? {} : { NetworkingConfig: { EndpointsConfig: { [ARK_NETWORK]: {} } } }),
+  };
+}
+
 /** The last line of Steam's PalServer.sh, optionally already carrying our preload. */
 const PAL_LAUNCH_LINE =
   /^([ \t]*)(?:LD_PRELOAD=(?:"[^"]*"|\S+)[ \t]+)?("\$UE_PROJECT_ROOT\/Pal\/Binaries\/Linux\/PalServer-Linux-Shipping"[ \t]+Pal[ \t]+"\$@")[ \t]*$/m;
@@ -2229,4 +2282,67 @@ export function renderSdtdServerXml(input: {
     ([name, value]) => `  <property name="${name}" value="${esc(value)}"/>`,
   );
   return `<?xml version="1.0"?>\n<ServerSettings>\n${lines.join("\n")}\n</ServerSettings>\n`;
+}
+
+/**
+ * OpenTTD splits its config across three files under .config/openttd/: openttd.cfg
+ * (public settings), private.cfg (server name), secrets.cfg (passwords). We render all
+ * three fresh each start — the ich777 image hard-kills OpenTTD on `docker stop`, so it
+ * never persists its own config, making our render authoritative. Catalog settings carry
+ * emitAs="<section>.<key>" to route into the right [section] of openttd.cfg.
+ */
+export function renderOpenttdConfig(input: {
+  sessionName: string;
+  serverPassword: string;
+  adminPassword: string;
+  maxPlayers: number;
+  map: string; // landscape: temperate / arctic / tropic / toyland
+  gamePort: number;
+  adminPort: number;
+  catalog: SettingsCatalog;
+  config: ServerConfigValues;
+}): { "openttd.cfg": string; "private.cfg": string; "secrets.cfg": string } {
+  // openttd.cfg values are read to end-of-line, so a stray newline would corrupt the
+  // file — strip control chars from any free-text value.
+  const clean = (v: unknown) => String(v).replace(/[\r\n]/g, " ").trim();
+
+  const sections: Record<string, Record<string, string | number>> = {
+    network: {
+      server_port: input.gamePort,
+      server_admin_port: input.adminPort,
+      max_clients: input.maxPlayers,
+    },
+    game_creation: { landscape: input.map },
+    difficulty: {},
+  };
+  for (const def of input.catalog.settings) {
+    const raw = input.config.values?.[def.key] ?? def.default;
+    if (raw === undefined || raw === null) continue;
+    const [section, key] = (def.emitAs ?? `network.${def.key}`).split(".");
+    if (!section || !key) continue;
+    (sections[section] ??= {})[key] =
+      typeof raw === "boolean" ? (raw ? "true" : "false") : (raw as string | number);
+  }
+
+  const renderIni = (secs: Record<string, Record<string, string | number>>) =>
+    Object.entries(secs)
+      .filter(([, kv]) => Object.keys(kv).length > 0)
+      .map(
+        ([name, kv]) =>
+          `[${name}]\n` +
+          Object.entries(kv)
+            .map(([k, v]) => `${k} = ${v}`)
+            .join("\n"),
+      )
+      .join("\n\n") + "\n";
+
+  return {
+    "openttd.cfg": renderIni(sections),
+    "private.cfg": `[network]\nserver_name = ${clean(input.sessionName)}\n`,
+    "secrets.cfg":
+      `[network]\n` +
+      `server_password = ${clean(input.serverPassword)}\n` +
+      `rcon_password = ${clean(input.adminPassword)}\n` +
+      `admin_password = ${clean(input.adminPassword)}\n`,
+  };
 }

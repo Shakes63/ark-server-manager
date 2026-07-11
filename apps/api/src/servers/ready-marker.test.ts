@@ -60,6 +60,12 @@ describe("readiness markers (per-game)", () => {
     expect(wine.test(">>> Starting server manager")).toBe(false);
   });
 
+  it("matches OpenTTD's 'Starting dedicated server' line", () => {
+    expect(
+      readyReFor(Game.OPENTTD).test("[2026-07-11 20:16:51] dbg: [net:3] Starting dedicated server, version 15.3"),
+    ).toBe(true);
+  });
+
   it("matches the Minecraft 'Done (Ns)! For help' line", () => {
     expect(readyReFor(Game.MINECRAFT).test('[Server thread/INFO]: Done (8.488s)! For help, type "help"')).toBe(
       true,

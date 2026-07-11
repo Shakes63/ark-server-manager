@@ -111,6 +111,9 @@ export const LocalPaths = {
       case Game.BEAMMP:
         // No world state — the client-mod zips + server Lua plugins ARE the data.
         return ["mods-client", "mods-server"];
+      case Game.OPENTTD:
+        // OpenTTD regenerates its config each start; only the saved games matter.
+        return ["serverfiles/.local/share/openttd/save"];
       default:
         return ["ShooterGame/Saved"]; // ASA (POK)
     }

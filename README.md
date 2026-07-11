@@ -26,7 +26,7 @@ player administration, and even your router's port-forwards.
 > with `/var/run/docker.sock` and a data volume mounted; see the template in
 > [`unraid/palisade.xml`](unraid/palisade.xml) for the full env/mount list.
 
-**Supported games (23):**
+**Supported games (24):**
 
 | Game | Runtime | Console | Mods |
 |---|---|---|---|
@@ -53,6 +53,7 @@ player administration, and even your router's port-forwards.
 | Factorio | native | RCON | mods folder (+ mod-portal auto-update) |
 | Rust | native | RCON | Oxide/uMod toggle (plugins folder) |
 | BeamNG.drive (BeamMP) | native | — | client-mod + Lua plugin folders |
+| OpenTTD | native (ich777) | in-game console | — (NewGRFs via in-game content) |
 
 [^pal]: Palworld runs the **native Linux** server, so mods are `.pak` content mods plus
     Lua/Blueprint mods loaded by UE4SS. Official UE4SS releases are Windows-only — there is no

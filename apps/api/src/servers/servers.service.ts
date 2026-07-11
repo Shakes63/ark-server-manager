@@ -169,6 +169,7 @@ export const READY_RE_BY_GAME: Record<Game, RegExp> = {
   // BeamMP prints an unmistakable all-caps line once fully up. PROVISIONAL —
   // confirm against a real boot.
   [Game.BEAMMP]: /ALL SYSTEMS STARTED SUCCESSFULLY|Vehicle data network online/i,
+  [Game.OPENTTD]: /Starting dedicated server/i,
 };
 
 /** The "server is now joinable" log-marker regex for a game. */

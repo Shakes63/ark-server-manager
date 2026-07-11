@@ -22,6 +22,7 @@ import { TERRARIA_CATALOG } from "./terraria.catalog";
 import { FACTORIO_CATALOG } from "./factorio.catalog";
 import { RUST_CATALOG } from "./rust.catalog";
 import { BEAMMP_CATALOG } from "./beammp.catalog";
+import { OPENTTD_CATALOG } from "./openttd.catalog";
 import { serializeGameIni, serializeGameUserSettings } from "./ini-serializer";
 
 @Injectable()
@@ -50,6 +51,7 @@ export class CatalogService {
     if (game === Game.FACTORIO) return FACTORIO_CATALOG;
     if (game === Game.RUST) return RUST_CATALOG;
     if (game === Game.BEAMMP) return BEAMMP_CATALOG;
+    if (game === Game.OPENTTD) return OPENTTD_CATALOG;
     throw new NotFoundException(`Unknown game: ${game}`);
   }
 

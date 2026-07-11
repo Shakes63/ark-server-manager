@@ -187,6 +187,32 @@ export function ConnectCommand({
     );
   }
 
+  if (game === Game.OPENTTD) {
+    return (
+      <div className={className}>
+        <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-slate-400">
+          <Terminal className="h-3.5 w-3.5" /> Join by IP (in-game)
+        </div>
+        <CopyRow value={`${hostOr}:${gamePort}`} title="Paste into OpenTTD's Add Server" />
+        <p className="mt-1 text-[11px] leading-snug text-slate-500">
+          In OpenTTD: <span className="font-mono">Multiplayer → Add Server</span>, paste this. If the
+          server is set Public it also shows in the in-game server list by name.
+        </p>
+        {joinPassword && (
+          <div className="mt-3">
+            <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-slate-400">
+              <Lock className="h-3.5 w-3.5" /> Join password
+            </div>
+            <CopyRow value={joinPassword} title="Copy the join password" />
+            <p className="mt-1 text-[11px] leading-snug text-slate-500">
+              Enter this when OpenTTD prompts for the server password.
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   if (game === Game.ICARUS) {
     return (
       <div className={className}>

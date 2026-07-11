@@ -88,6 +88,7 @@ const ACTIONS_BY_GAME: Record<Game, PlayerAction[]> = {
   [Game.FACTORIO]: ["kick", "ban", "whitelist", "admin"], // /kick /ban /whitelist add /promote
   [Game.RUST]: ["kick", "ban", "admin"], // kickid / banid / moderatorid (steamid-based)
   [Game.BEAMMP]: [], // stdin console only; joins visible in logs
+  [Game.OPENTTD]: [], // no programmatic admin (in-game console only)
 };
 
 const CAPTURE_NOTES: Partial<Record<Game, string>> = {

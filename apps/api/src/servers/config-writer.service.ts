@@ -10,6 +10,7 @@ import {
   patchPalServerLauncher,
   renderSotfConfig,
   renderSdtdServerXml,
+  renderOpenttdConfig,
   patchLifWorldXml,
   patchAtsServerConfig,
   patchTShockConfig,
@@ -276,6 +277,28 @@ export class ServerConfigWriter {
         config: JSON.parse(server.configJson) as ServerConfigValues,
       });
       await writeFile(join(dir, "sdtdserver.xml"), xml, "utf8");
+      return;
+    }
+
+    // OpenTTD reads three cfg files under serverfiles/.config/openttd — we render them
+    // fresh each start (OpenTTD never persists its own; the ich777 image hard-kills it).
+    if (game === Game.OPENTTD) {
+      const dir = join(env.DATA_DIR, "instances", server.id, "serverfiles", ".config", "openttd");
+      await mkdir(dir, { recursive: true });
+      const files = renderOpenttdConfig({
+        sessionName: server.name,
+        serverPassword: server.serverPasswordEnc ? this.crypto.decrypt(server.serverPasswordEnc) : "",
+        adminPassword: server.adminPasswordEnc ? this.crypto.decrypt(server.adminPasswordEnc) : "",
+        maxPlayers: server.maxPlayers,
+        map: server.map,
+        gamePort: server.gamePort,
+        adminPort: server.rconPort || 3977,
+        catalog: this.catalog.getCatalog(Game.OPENTTD),
+        config: JSON.parse(server.configJson) as ServerConfigValues,
+      });
+      for (const [name, content] of Object.entries(files)) {
+        await writeFile(join(dir, name), content, "utf8");
+      }
       return;
     }
 

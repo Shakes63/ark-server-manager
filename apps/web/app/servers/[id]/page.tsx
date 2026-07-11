@@ -184,7 +184,7 @@ export default function ServerDetailPage({ params }: { params: Promise<{ id: str
             ? new Set<Tab>(["Console", "Mods"]) // no RCON, no mod support
             : server.game === Game.VRISING || server.game === Game.FACTORIO || server.game === Game.RUST
               ? new Set<Tab>(["Mods"]) // RCON console, but no mod browser
-              : server.game === Game.SOTF || server.game === Game.SATISFACTORY || server.game === Game.LIF || server.game === Game.ATS || server.game === Game.ETS2 || server.game === Game.CORE_KEEPER || server.game === Game.TERRARIA || server.game === Game.BEAMMP
+              : server.game === Game.SOTF || server.game === Game.SATISFACTORY || server.game === Game.LIF || server.game === Game.ATS || server.game === Game.ETS2 || server.game === Game.CORE_KEEPER || server.game === Game.TERRARIA || server.game === Game.BEAMMP || server.game === Game.OPENTTD
                 ? new Set<Tab>(["Console", "Mods"]) // no RCON/console, no mod browser
                 : new Set<Tab>();
   const visibleTabs = TABS.filter((t) => !hiddenTabs.has(t));

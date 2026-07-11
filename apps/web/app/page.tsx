@@ -30,6 +30,7 @@ import {
   FACTORIO_OFFICIAL_MAPS,
   RUST_OFFICIAL_MAPS,
   BEAMMP_OFFICIAL_MAPS,
+  OPENTTD_OFFICIAL_MAPS,
   GAME_LABELS,
   MAX_PLAYERS_BY_GAME,
   DEFAULT_MAX_PLAYERS_BY_GAME,
@@ -334,6 +335,7 @@ const MAPS_FOR: Record<Game, readonly string[]> = {
   [Game.FACTORIO]: FACTORIO_OFFICIAL_MAPS,
   [Game.RUST]: RUST_OFFICIAL_MAPS,
   [Game.BEAMMP]: BEAMMP_OFFICIAL_MAPS,
+  [Game.OPENTTD]: OPENTTD_OFFICIAL_MAPS,
 };
 
 function CreateServerForm({ onDone }: { onDone: () => void }) {

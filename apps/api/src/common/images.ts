@@ -91,6 +91,7 @@ export const IMAGES: Record<Game, string> = {
   // admin-password field). The server is a lightweight relay — physics run on the
   // clients. NO RCON/query; console is stdin-only.
   [Game.BEAMMP]: "rouhim/beammp-server:latest",
+  [Game.OPENTTD]: "ich777/openttdserver:latest",
 };
 
 /** POK keeps all instance data (install + saves + config) under this path. */
@@ -184,6 +185,9 @@ export const RUST_DATA_DIR = "/steamcmd/rust";
  *  Lua plugins. There's no world state — these ARE the persistent data. */
 export const BEAMMP_CLIENT_MODS_DIR = "/beammp/Resources/Client";
 export const BEAMMP_SERVER_MODS_DIR = "/beammp/Resources/Server";
+// OpenTTD (ich777): DATA_DIR is /serverdata; SERVER_DIR is /serverdata/serverfiles, with
+// config at serverfiles/.config/openttd and saves at serverfiles/.local/share/openttd.
+export const OPENTTD_DATA_DIR = "/serverdata";
 
 /**
  * The uid/gid each image runs the server as. Neither chowns its mounts fully
@@ -214,6 +218,7 @@ export const SERVER_UID: Record<Game, number> = {
   [Game.FACTORIO]: 845, // the image's "factorio" user, remapped via PUID/PGID (we pass ours)
   [Game.RUST]: 0, // didstopia runs as root
   [Game.BEAMMP]: 0, // rouhim runs as root (mod dirs world-writable per its docs)
+  [Game.OPENTTD]: 99, // ich777 wrapper (UID/GID env = PUID/PGID)
 };
 export const SERVER_GID: Record<Game, number> = {
   [Game.ASA]: 7777,
@@ -239,4 +244,5 @@ export const SERVER_GID: Record<Game, number> = {
   [Game.FACTORIO]: 845,
   [Game.RUST]: 0,
   [Game.BEAMMP]: 0,
+  [Game.OPENTTD]: 100,
 };
