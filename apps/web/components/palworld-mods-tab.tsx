@@ -11,16 +11,16 @@ import { apiGet, apiPatch, apiPost, apiDelete, apiUpload } from "@/lib/api";
  */
 const CURATED_SERVER_MODS: { name: string; desc: string; url: string; host: string }[] = [
   {
-    name: "PalGuard",
-    desc: "The most-used server anti-cheat + admin toolkit — spawn/give/teleport, extra RCON commands, and exploit/crash protection.",
-    url: "https://www.nexusmods.com/palworld/mods/451",
-    host: "Nexus Mods",
-  },
-  {
     name: "PalDefender",
-    desc: "Server-side anti-cheat with pre-execution validation checks that warn, kick, or ban cheaters. Actively maintained.",
+    desc: "Server-side anti-cheat with pre-execution validation that warns, kicks, or bans cheaters. Actively maintained; releases on GitHub.",
     url: "https://github.com/Ultimeit/PalDefender/releases",
     host: "GitHub",
+  },
+  {
+    name: "PalGuard",
+    desc: "Popular server anti-cheat + admin toolkit (spawn/give/teleport, extra RCON, exploit/crash protection). Community-distributed — its ko-fi page is the official home + Discord link.",
+    url: "https://ko-fi.com/palguard",
+    host: "ko-fi / Discord",
   },
 ];
 
