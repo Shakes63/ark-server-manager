@@ -7,6 +7,7 @@ import { join, dirname, basename } from "node:path";
 import { Game } from "@ark/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { LocalPaths } from "../common/paths";
+import { extractZipSafe } from "../common/safe-extract";
 import { loadEnv } from "../config/env";
 
 const execFileP = promisify(execFile);
@@ -204,14 +205,7 @@ export class BedrockModsService {
   }
 
   private async unzip(data: Buffer, dest: string) {
-    const tmp = join(tmpdir(), `bedrockmod-zip-${process.pid}-${Date.now()}.zip`);
-    await writeFile(tmp, data);
-    try {
-      await execFileP("unzip", ["-o", tmp, "-d", dest]);
-    } catch (e) {
-      throw new BadRequestException(`Could not unzip the upload: ${(e as Error).message}`);
-    } finally {
-      await rm(tmp, { force: true }).catch(() => undefined);
-    }
+    // Untrusted upload → traversal-safe extraction (rejects ../ + absolute, strips symlinks).
+    await extractZipSafe(data, dest);
   }
 }

@@ -22,6 +22,15 @@ const x = (help: string): Partial<SettingDef> => ({ min: 0, max: 5, step: 0.1, u
 const xBig = (help: string): Partial<SettingDef> => ({ min: 0, max: 20, step: 0.1, unit: "×", help });
 
 const settings: SettingDef[] = [
+  // ── Version ──────────────────────────────────────────────────────────────────
+  // thijsvanloef INSTALL_BETA_INSIDER env → the Palworld beta (insider) build.
+  pset("INSTALL_BETA_INSIDER", "Game version", "Version", "enum", "false", {
+    choices: [
+      { value: "false", label: "Stable" },
+      { value: "true", label: "Beta (insider)" },
+    ],
+    help: "Install the Palworld beta (insider) build instead of the stable release. Changing it re-downloads the game on the next start.",
+  }),
   // ── General ────────────────────────────────────────────────────────────────
   pset("SERVER_DESCRIPTION", "Server description", "General", "string", "", {
     help: "Description shown next to the server in the browser.",

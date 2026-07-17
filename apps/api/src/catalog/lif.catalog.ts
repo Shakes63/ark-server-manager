@@ -33,6 +33,14 @@ export const LIF_SKILLCAP_GROUPS: Record<string, number> = {
 };
 
 const settings: SettingDef[] = [
+  // ── Version ──────────────────────────────────────────────────────────────────
+  // Steam branch of the dedicated server. noEmit: it builds GAME_ID (buildLifSpec),
+  // not a world_1.xml tag. Dropdown from the app's Steam branches (public / legacy…).
+  lset("STEAM_BRANCH", "Game version", "Version", "string", "public", {
+    noEmit: true,
+    optionsSource: "game-versions",
+    help: "Which Steam branch/version of the LiF:YO dedicated server to install. Public is the current release; dx9-legacy / vanilla-1.3.6 / x32-legacy are older builds. Changing it re-downloads the game on the next start.",
+  }),
   // ── Progression ───────────────────────────────────────────────────────────────
   lset("skillsStatsMult", "Skill/stat progression multiplier", "Progression", "float", 1, {
     min: 0.1,

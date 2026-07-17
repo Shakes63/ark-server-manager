@@ -1,16 +1,25 @@
 import "dotenv/config";
 import "reflect-metadata";
+// MUST precede AppModule: provisions SECRETS_KEY/JWT_SECRET before any module's
+// import-time loadEnv() (e.g. the realtime gateway's CORS option) runs.
+import "./config/preload";
 import { NestFactory } from "@nestjs/core";
 import { ValidationPipe, Logger } from "@nestjs/common";
 import helmet from "helmet";
 import { AppModule } from "./app.module";
-import { loadEnv } from "./config/env";
+import { loadEnv, resetEnvCache } from "./config/env";
+import { ensureHostDataDir } from "./config/ensure-host-data-dir";
 import { installProcessSafetyNet } from "./common/process-safety";
 
 async function bootstrap() {
   // Guard against a single background error (a socket reset, a stray rejection)
   // taking the whole manager down — must be active before anything else runs.
   installProcessSafetyNet();
+  // Auto-detect HOST_DATA_DIR from our own /data mount if unset (best-effort, async).
+  // An import-time loadEnv() may have already cached the env without it, so drop the
+  // cache afterwards to force a fresh read that includes the detected path.
+  await ensureHostDataDir();
+  resetEnvCache();
   const env = loadEnv();
   const app = await NestFactory.create(AppModule, { bufferLogs: false });
 

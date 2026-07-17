@@ -32,7 +32,7 @@ export function UnofficialListHelp({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const conan = game === Game.CONAN;
-  const palworld = game === Game.PALWORLD;
+  const palworld = game === Game.PALWORLD || game === Game.PALWORLD_WINE;
   const minecraft = game === Game.MINECRAFT;
   const icarus = game === Game.ICARUS;
   const bedrock = game === Game.BEDROCK;

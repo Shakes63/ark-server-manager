@@ -51,6 +51,7 @@ export const LocalPaths = {
       case Game.CONAN:
         return ["server/ConanSandbox/Saved"];
       case Game.PALWORLD:
+      case Game.PALWORLD_WINE:
         return ["Pal/Saved"];
       case Game.MINECRAFT:
         return ["world", "world_nether", "world_the_end"];
@@ -110,6 +111,9 @@ export const LocalPaths = {
       case Game.BEAMMP:
         // No world state — the client-mod zips + server Lua plugins ARE the data.
         return ["mods-client", "mods-server"];
+      case Game.OPENTTD:
+        // OpenTTD regenerates its config each start; only the saved games matter.
+        return ["serverfiles/.local/share/openttd/save"];
       default:
         return ["ShooterGame/Saved"]; // ASA (POK)
     }

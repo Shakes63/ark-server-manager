@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PalModsService, UE4SS_LINUX } from "./palmods.service";
+import { Game } from "@ark/shared";
+import { PalModsService, UE4SS_LINUX, UE4SS_WINDOWS, PAL_FRAMEWORK_WINE_LOADER } from "./palmods.service";
 
 /** UE4SS ships GuiConsoleEnabled=1 (no display on a dedicated server) and
  *  bUseUObjectArrayCache=true (crashes Palworld). Both must be flipped on install. */
@@ -48,5 +49,36 @@ describe("UE4SS headless settings patch", () => {
   it("pins an exact release asset and digest (never 'latest')", () => {
     expect(UE4SS_LINUX.url).toMatch(/\/releases\/download\/linux-experiment\/UE4SS_0\.0\.0\.zip$/);
     expect(UE4SS_LINUX.sha256).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("pins the official Windows UE4SS build for the Wine variant", () => {
+    // Wine loads the official Windows release (a dwmapi.dll proxy), not the Linux fork.
+    expect(UE4SS_WINDOWS.url).toMatch(/UE4SS-RE\/RE-UE4SS\/releases\/download\/v[\d.]+\/UE4SS_v[\d.]+\.zip$/);
+    expect(UE4SS_WINDOWS.sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(PAL_FRAMEWORK_WINE_LOADER).toBe("Pal/Binaries/Win64/dwmapi.dll");
+  });
+});
+
+/** The framework install dir diverges by variant: native → Pal/Binaries/Linux (.so on
+ *  LD_PRELOAD), Wine → Pal/Binaries/Win64 (dwmapi.dll proxy). */
+describe("framework dir routing by game", () => {
+  // frameworkDir resolves via LocalPaths.instanceRoot, which validates env config.
+  process.env.SECRETS_KEY = "a".repeat(64);
+  process.env.JWT_SECRET = "test-jwt-secret-1234";
+  process.env.DATA_DIR = "/data";
+  const svc = new PalModsService({} as never);
+  const isWine = (s: { game: string }) =>
+    (svc as unknown as { isWine(s: { game: string }): boolean }).isWine(s);
+  const fwDir = (id: string, wine: boolean) =>
+    (svc as unknown as { frameworkDir(id: string, wine: boolean): string }).frameworkDir(id, wine);
+
+  it("recognizes the Wine variant", () => {
+    expect(isWine({ game: Game.PALWORLD_WINE })).toBe(true);
+    expect(isWine({ game: Game.PALWORLD })).toBe(false);
+  });
+
+  it("targets Win64 for Wine and Linux for native", () => {
+    expect(fwDir("srv1", true).endsWith("Pal/Binaries/Win64")).toBe(true);
+    expect(fwDir("srv1", false).endsWith("Pal/Binaries/Linux")).toBe(true);
   });
 });

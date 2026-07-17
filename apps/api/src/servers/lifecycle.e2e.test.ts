@@ -1,203 +1,17 @@
 import { describe, it, expect, beforeAll, beforeEach } from "vitest";
-import { mkdtemp } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Game, ServerState } from "@ark/shared";
+import { FakeDocker, makeRow, makeService, setupE2eEnv, startServer } from "./lifecycle-harness";
 
 /**
  * Lifecycle E2E: drives the real ServersService (real state machine, real
  * spec builder, real config writers) against a scripted fake Docker daemon and
  * an in-memory Prisma. Catches wiring regressions the per-game unit tests
  * can't — e.g. the writeInis fall-through that silently rendered ARK INIs into
- * Core Keeper and Rust instance dirs.
- *
- * Deliberately NOT mocked: buildContainerSpec, readiness markers, the state
- * machine's legal-transition table, writeInis. Mocked: Docker, the installer's
- * file-copying, RCON, backups.
+ * Core Keeper and Rust instance dirs. Fault-injection lives in chaos.e2e.test.ts.
  */
 
-beforeAll(async () => {
-  process.env.SECRETS_KEY = "a".repeat(64);
-  process.env.JWT_SECRET = "test-jwt-secret-1234";
-  process.env.DATA_DIR = await mkdtemp(join(tmpdir(), "palisade-e2e-"));
-});
-
-interface ServerRow {
-  id: string;
-  name: string;
-  game: string;
-  map: string;
-  state: string;
-  maxPlayers: number;
-  gamePort: number;
-  rawSocketPort: number;
-  queryPort: number;
-  rconPort: number;
-  adminPasswordEnc: string | null;
-  serverPasswordEnc: string | null;
-  spectatorPasswordEnc: string | null;
-  configJson: string;
-  modIds: string;
-  containerId: string | null;
-  clusterId: string | null;
-  cluster: null;
-  ramLimitMb: number | null;
-  cpuLimit: number | null;
-  installedBuildId: string | null;
-  updateAvailable: boolean;
-  configDirty: boolean;
-}
-
-function makeRow(over: Partial<ServerRow> = {}): ServerRow {
-  return {
-    id: "srv-e2e",
-    name: "E2E Server",
-    game: Game.ASA,
-    map: "TheIsland_WP",
-    state: ServerState.Stopped,
-    maxPlayers: 10,
-    gamePort: 7777,
-    rawSocketPort: 7778,
-    queryPort: 7779,
-    rconPort: 27020,
-    adminPasswordEnc: null,
-    serverPasswordEnc: null,
-    spectatorPasswordEnc: null,
-    configJson: JSON.stringify({ values: {} }),
-    modIds: "[]",
-    containerId: null,
-    clusterId: null,
-    cluster: null,
-    ramLimitMb: null,
-    cpuLimit: null,
-    installedBuildId: null,
-    updateAvailable: false,
-    configDirty: false,
-    ...over,
-  };
-}
-
-/** Records everything the service asks Docker to do, and replays scripted logs. */
-class FakeDocker {
-  createdSpecs: Record<string, unknown>[] = [];
-  started: string[] = [];
-  stopped: string[] = [];
-  removed: string[] = [];
-  pulled: string[] = [];
-  /** Lines fed to the log follower when a container starts. */
-  logScript: string[] = [];
-  private lineHandlers = new Map<string, (line: string) => void>();
-
-  client = {
-    getContainer: () => ({ wait: () => new Promise(() => undefined) }), // never exits
-  };
-
-  async pullImage(image: string) {
-    this.pulled.push(image);
-  }
-  async createContainer(spec: Record<string, unknown>) {
-    this.createdSpecs.push(spec);
-    return `container-${this.createdSpecs.length}`;
-  }
-  async start(id: string) {
-    this.started.push(id);
-    // Real Docker streams logs asynchronously, and the service attaches its
-    // follower AFTER start() returns — replay on a later tick or the ready
-    // marker would be emitted into the void.
-    setTimeout(() => {
-      for (const line of this.logScript) for (const h of this.lineHandlers.values()) h(line);
-    }, 0);
-  }
-  async stop(id: string) {
-    this.stopped.push(id);
-  }
-  async remove(id: string) {
-    this.removed.push(id);
-  }
-  async removeByServerId() {
-    /* nothing to remove in the fake */
-  }
-  async tailLogs() {
-    return "";
-  }
-  async followLogs(containerId: string, onLine: (line: string) => void) {
-    this.lineHandlers.set(containerId, onLine);
-    return () => this.lineHandlers.delete(containerId);
-  }
-  async inspect() {
-    return {};
-  }
-  async listManagedServers() {
-    return [];
-  }
-}
-
-/** Minimal in-memory Prisma for the rows ServersService touches on start. */
-function makePrisma(row: ServerRow) {
-  return {
-    row,
-    server: {
-      findUnique: async () => row,
-      findMany: async () => [row],
-      update: async ({ data }: { data: Partial<ServerRow> }) => Object.assign(row, data),
-      count: async () => 1,
-    },
-    modInstall: { findMany: async () => [] },
-    snapshot: { findMany: async () => [] },
-  };
-}
-
-const noop = async () => undefined;
-
-async function makeService(row: ServerRow, docker: FakeDocker) {
-  const { ServersService } = await import("./servers.service");
-  const { StateMachineService } = await import("./state-machine.service");
-  const { CatalogService } = await import("../catalog/catalog.service");
-  const { ServerConfigWriter } = await import("./config-writer.service");
-
-  const prisma = makePrisma(row);
-  const crypto = { encrypt: (s: string) => s, decrypt: (s: string) => s };
-  const catalog = new CatalogService();
-  // The REAL config writer — writeInis is exactly what the fall-through guard tests.
-  const configWriter = new ServerConfigWriter(crypto as never, catalog);
-  const events = { emit: noop, onEvent: () => undefined };
-  const realtime = { broadcast: () => undefined };
-  const sm = new StateMachineService(prisma as never, events as never, realtime as never);
-  const logCapture = {
-    clear: () => undefined,
-    seed: () => undefined,
-    recordLog: () => undefined,
-    recordConsole: () => undefined,
-    getLogs: () => "",
-    getConsole: () => "",
-    onLine: () => undefined,
-  };
-  const service = new ServersService(
-    prisma as never,
-    crypto as never,
-    events as never,
-    realtime as never,
-    docker as never,
-    catalog,
-    { prepareGameFiles: noop, seedGameFilesCache: noop } as never,
-    { disconnect: noop, saveWorld: noop, broadcast: noop } as never,
-    sm,
-    { getTimezone: async () => "UTC", get: async () => null, getBackupKeep: async () => 10 } as never,
-    logCapture as never,
-    { create: noop } as never,
-    { count: async () => ({ online: 0 }) } as never,
-    configWriter,
-  );
-  return { service, prisma, sm };
-}
-
-/** Start bypassing the RAM guard + port check (host-dependent, not what we test). */
-async function startServer(service: unknown, id: string) {
-  const s = service as { doStart: (id: string) => Promise<void>; assertPortsFree: (r: unknown) => Promise<void> };
-  const svc = s as unknown as Record<string, unknown>;
-  svc.assertPortsFree = async () => undefined;
-  await (svc.doStart as (id: string) => Promise<void>).call(svc, id);
-}
+beforeAll(setupE2eEnv);
 
 describe("server lifecycle (fake Docker)", () => {
   let docker: FakeDocker;
@@ -243,7 +57,10 @@ describe("server lifecycle (fake Docker)", () => {
         HostConfig: { SecurityOpt: string[]; PidsLimit: number };
       };
       expect(spec.Image, game).toBeTruthy();
-      expect(spec.HostConfig.SecurityOpt, game).toContain("no-new-privileges:true");
+      // ASA + Conan (POK images) sudo in their entrypoints → no-new-privileges
+      // would crash them, so they're exempt; every other game gets it.
+      const nnp = (spec.HostConfig.SecurityOpt ?? []).includes("no-new-privileges:true");
+      expect(nnp, game).toBe(!(game === Game.ASA || game === Game.CONAN));
       expect(spec.HostConfig.PidsLimit, game).toBe(8192);
       expect(d.started, game).toEqual(["container-1"]);
       expect(row.state, game).toBe(ServerState.Starting); // no marker scripted
@@ -327,5 +144,44 @@ describe("restart", () => {
     expect(ramGuardCalls, "restart must not consult the RAM guard").toBe(0);
     expect(portCheckCalls, "restart must still check ports").toBe(1);
     expect(docker.started).toEqual(["container-1"]);
+  });
+});
+
+// Security regression guard: every game's container spec must keep the hardening
+// invariants. Adding a game (or editing a spec builder) that silently drops one is a
+// red build here — a dropped cap or a docker.sock mount reads as "still works" because
+// the container runs fine, just less safely. Mirrors the reliability chaos harness.
+describe("container hardening invariants (every game)", () => {
+  const RAM = 4096;
+
+  it("keeps no-new-privileges (except the exact POK exempt set), pids/mem caps, no auto-restart, and never mounts docker.sock", async () => {
+    const missingNnp: string[] = [];
+    for (const game of Object.values(Game)) {
+      const d = new FakeDocker();
+      const row = makeRow({ game, map: "map", id: `harden-${game}`, ramLimitMb: RAM });
+      const { service } = await makeService(row, d);
+      await startServer(service, row.id);
+      const host = (d.createdSpecs[0] as { HostConfig: Record<string, unknown> }).HostConfig;
+
+      const secOpt = (host.SecurityOpt as string[] | undefined) ?? [];
+      if (!secOpt.includes("no-new-privileges:true")) missingNnp.push(game);
+
+      expect(host.PidsLimit, `${game}: PidsLimit must be set`).toBeGreaterThan(0);
+      // The manager's watchdog owns restarts — a Docker restart policy would fight it.
+      expect((host.RestartPolicy as { Name?: string })?.Name, `${game}: RestartPolicy`).toBe("no");
+      // RAM cap honored, or one server can OOM the whole box.
+      expect(host.Memory, `${game}: RAM cap`).toBe(RAM * 1024 * 1024);
+      // THE critical one: a game container must NEVER see the Docker socket (that's a
+      // host-root escape). The manager talks to Docker via the socket-proxy only.
+      for (const bind of (host.Binds as string[] | undefined) ?? []) {
+        expect(bind, `${game}: must not bind the docker socket`).not.toMatch(
+          /docker\.sock|\/var\/run\/docker/,
+        );
+      }
+    }
+    // The no-new-privileges exemption is EXACTLY the two POK images (their entrypoints
+    // sudo, which the flag breaks even as root). A new game landing in this list must
+    // be a deliberate, reviewed decision — not an accident.
+    expect(missingNnp.sort()).toEqual([Game.ASA, Game.CONAN].sort());
   });
 });

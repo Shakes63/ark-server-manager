@@ -10,6 +10,7 @@ import { EventsService } from "../events/events.service";
 import { RconService } from "../rcon/rcon.service";
 import { ManagerSettingsService } from "../manager-settings/manager-settings.service";
 import { LocalPaths } from "../common/paths";
+import { extractTarGzSafe } from "../common/safe-extract";
 import { SERVER_UID, SERVER_GID } from "../common/images";
 import { loadEnv } from "../config/env";
 
@@ -169,7 +170,8 @@ export class BackupsService {
       await writeFile(archive, data);
       const extractDir = join(tmp, "x");
       await mkdir(extractDir, { recursive: true });
-      await execFileP("tar", ["xzf", archive, "-C", extractDir]);
+      // Uploaded archive is untrusted → vet entry names + drop archive ownership.
+      await extractTarGzSafe(archive, extractDir);
 
       const subs = LocalPaths.saveSubpaths(game);
       const present: string[] = [];

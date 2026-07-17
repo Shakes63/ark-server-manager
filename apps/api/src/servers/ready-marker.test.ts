@@ -52,6 +52,20 @@ describe("readiness markers (per-game)", () => {
     expect(readyReFor(Game.PALWORLD).test("Running Palworld dedicated server on :7777")).toBe(true);
   });
 
+  it("flips the Wine variant on the ripps818 image's 'Starting the gameserver' line", () => {
+    const wine = readyReFor(Game.PALWORLD_WINE);
+    expect(wine.test(">>> Starting the gameserver")).toBe(true);
+    // Must NOT flip on the earlier "Preparing to start" / "server manager" lines.
+    expect(wine.test(">>> Preparing to start the gameserver")).toBe(false);
+    expect(wine.test(">>> Starting server manager")).toBe(false);
+  });
+
+  it("matches OpenTTD's 'Starting dedicated server' line", () => {
+    expect(
+      readyReFor(Game.OPENTTD).test("[2026-07-11 20:16:51] dbg: [net:3] Starting dedicated server, version 15.3"),
+    ).toBe(true);
+  });
+
   it("matches the Minecraft 'Done (Ns)! For help' line", () => {
     expect(readyReFor(Game.MINECRAFT).test('[Server thread/INFO]: Done (8.488s)! For help, type "help"')).toBe(
       true,

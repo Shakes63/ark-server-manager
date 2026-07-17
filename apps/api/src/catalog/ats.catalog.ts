@@ -23,6 +23,14 @@ function aset(
 }
 
 const settings: SettingDef[] = [
+  // ── Version ──────────────────────────────────────────────────────────────────
+  // Steam branch of the dedicated server. noEmit: it builds GAME_ID (buildAtsSpec),
+  // it's not a server_config.sii key. Dropdown from the app's Steam branches.
+  aset("STEAM_BRANCH", "Game version", "Version", "string", "public", {
+    noEmit: true,
+    optionsSource: "game-versions",
+    help: "Which Steam branch/version of the dedicated server to install. Public is the current release; specific game versions (e.g. 1.53.x) are also offered. Changing it re-downloads the game on the next start.",
+  }),
   // ── Session ───────────────────────────────────────────────────────────────────
   aset("description", "Server description", "Session", "string", ""),
   aset("welcome_message", "Welcome message", "Session", "string", ""),

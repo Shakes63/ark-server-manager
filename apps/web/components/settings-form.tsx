@@ -24,6 +24,7 @@ import {
   MessageSquare,
   Skull,
   Shield,
+  GitBranch,
   Map as MapIcon,
   type LucideIcon,
 } from "lucide-react";
@@ -50,6 +51,7 @@ import {
   type SpawnContainerEntry,
   type CraftCostEntry,
   type CraftCostResource,
+  type GameVersionsResult,
 } from "@ark/shared";
 import { apiGet, apiPatch, apiPost, apiDelete } from "@/lib/api";
 import { ARK_ITEMS } from "@/lib/ark-items";
@@ -120,6 +122,7 @@ const CONAN_GROUPS: SettingGroup[] = [
 
 // Palworld's catalog categories → their own tabs.
 const PALWORLD_GROUPS: SettingGroup[] = [
+  { id: "version", label: "Version", Icon: GitBranch, cats: ["Version"] },
   { id: "general", label: "General", Icon: SlidersHorizontal, cats: ["General", "PvP & Rules"] },
   { id: "rates", label: "Rates & World", Icon: Gauge, cats: ["Progression", "World"] },
   { id: "combat", label: "Combat & Survival", Icon: Swords, cats: ["Combat", "Survival"] },
@@ -151,6 +154,7 @@ const BEDROCK_GROUPS: SettingGroup[] = [
 
 // Valheim's env-driven catalog + launch-flag world modifiers → its own tabs.
 const VALHEIM_GROUPS: SettingGroup[] = [
+  { id: "version", label: "Version", Icon: GitBranch, cats: ["Version"] },
   { id: "world", label: "World", Icon: MapIcon, cats: ["World"] },
   { id: "server", label: "Server", Icon: SlidersHorizontal, cats: ["Server"] },
   { id: "modifiers", label: "World modifiers", Icon: Swords, cats: ["World modifiers"] },
@@ -158,6 +162,7 @@ const VALHEIM_GROUPS: SettingGroup[] = [
 
 // 7 Days to Die (rendered into sdtdserver.xml) → its own tabs, one per config section.
 const SEVEN_DAYS_GROUPS: SettingGroup[] = [
+  { id: "version", label: "Version", Icon: GitBranch, cats: ["Version"] },
   { id: "world", label: "World", Icon: MapIcon, cats: ["World"] },
   { id: "difficulty", label: "Difficulty", Icon: Swords, cats: ["Difficulty"] },
   { id: "zombies", label: "Zombies", Icon: Skull, cats: ["Zombies"] },
@@ -169,6 +174,7 @@ const SEVEN_DAYS_GROUPS: SettingGroup[] = [
 
 // Enshrouded's env-driven gameSettings (SERVER_GS_*) + chat → its own tabs.
 const ENSHROUDED_GROUPS: SettingGroup[] = [
+  { id: "version", label: "Version", Icon: GitBranch, cats: ["Version"] },
   { id: "difficulty", label: "Difficulty", Icon: Swords, cats: ["Difficulty"] },
   { id: "players", label: "Players", Icon: User, cats: ["Players"] },
   { id: "world", label: "World", Icon: MapIcon, cats: ["World"] },
@@ -216,7 +222,7 @@ export function SettingsForm({
   const GROUPS =
     game === Game.CONAN
       ? CONAN_GROUPS
-      : game === Game.PALWORLD
+      : game === Game.PALWORLD || game === Game.PALWORLD_WINE
         ? PALWORLD_GROUPS
         : game === Game.MINECRAFT
           ? MINECRAFT_GROUPS
@@ -640,6 +646,7 @@ export function SettingsForm({
                     <Field
                       key={def.key}
                       def={def}
+                      game={game}
                       value={cur}
                       onChange={update}
                       overridden={isOverridden(def)}
@@ -834,8 +841,77 @@ function PresetsMenu({
   );
 }
 
+// Cache the version list per game across field remounts (one network trip per game).
+const versionsCache = new Map<Game, GameVersionsResult>();
+
+/**
+ * Dropdown of published GAME versions fetched live from GET /games/:game/versions
+ * (Minecraft/OpenTTD), so the user picks a real version instead of guessing. The
+ * shipped default (LATEST / latest) is the first option; a currently-pinned value not
+ * in the list stays selectable; and if the list can't load we fall back to a text box.
+ */
+function VersionSelectField({
+  def,
+  game,
+  value,
+  onChange,
+}: {
+  def: SettingDef;
+  game: Game;
+  value: unknown;
+  onChange: (key: string, value: unknown) => void;
+}) {
+  const [data, setData] = useState<GameVersionsResult | null>(versionsCache.get(game) ?? null);
+  const [failed, setFailed] = useState(false);
+  const current = String(value ?? "");
+
+  useEffect(() => {
+    if (data) return;
+    let live = true;
+    apiGet<GameVersionsResult>(`/games/${game}/versions`)
+      .then((r) => {
+        if (!live) return;
+        if (r.options.length) {
+          versionsCache.set(game, r);
+          setData(r);
+        } else setFailed(true); // no provider / empty — degrade to text input
+      })
+      .catch(() => live && setFailed(true));
+    return () => {
+      live = false;
+    };
+  }, [game, data]);
+
+  // Couldn't load a list → let the user still type a version by hand.
+  if (failed) {
+    return <input className="input" value={current} onChange={(e) => onChange(def.key, e.target.value)} />;
+  }
+  if (!data) {
+    return (
+      <select className="input" disabled>
+        <option>Loading versions…</option>
+      </select>
+    );
+  }
+
+  const known = new Set([data.defaultValue, ...data.options.map((o) => o.value)]);
+  return (
+    <select className="input" value={current} onChange={(e) => onChange(def.key, e.target.value)}>
+      <option value={data.defaultValue}>{data.defaultLabel}</option>
+      {/* A pinned value the registry no longer lists stays selectable. */}
+      {current && !known.has(current) && <option value={current}>{current} (pinned)</option>}
+      {data.options.map((o) => (
+        <option key={o.value} value={o.value}>
+          {o.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 function Field({
   def,
+  game,
   value,
   onChange,
   overridden,
@@ -843,6 +919,7 @@ function Field({
   presetMark,
 }: {
   def: SettingDef;
+  game: Game;
   value: unknown;
   onChange: (key: string, value: unknown) => void;
   overridden?: boolean;
@@ -883,7 +960,9 @@ function Field({
         </span>
       )}
       <fieldset disabled={!dep.active} className={`min-w-0 ${dep.active ? "" : "opacity-50"}`}>
-      {def.type === "grid" ? (
+      {def.optionsSource === "game-versions" ? (
+        <VersionSelectField def={def} game={game} value={value} onChange={onChange} />
+      ) : def.type === "grid" ? (
         <GridField def={def} value={value} onChange={onChange} />
       ) : def.type === "motd" ? (
         <MotdField def={def} value={value} onChange={onChange} />

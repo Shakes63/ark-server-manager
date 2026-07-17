@@ -56,6 +56,7 @@ const RCON_POLL_GAMES = new Set<Game>([
   Game.ASE,
   Game.CONAN,
   Game.PALWORLD,
+  Game.PALWORLD_WINE,
   Game.MINECRAFT,
   Game.SEVEN_DAYS,
   Game.ZOMBOID,
@@ -68,6 +69,7 @@ const ACTIONS_BY_GAME: Record<Game, PlayerAction[]> = {
   [Game.ASE]: ["kick", "ban"],
   [Game.CONAN]: ["kick", "ban"],
   [Game.PALWORLD]: ["kick", "ban"],
+  [Game.PALWORLD_WINE]: ["kick", "ban"],
   [Game.MINECRAFT]: ["kick", "ban", "whitelist", "admin"],
   [Game.ICARUS]: [], // capture-only (admin is the in-game /AdminLogin password)
   [Game.BEDROCK]: ["whitelist", "admin"],
@@ -86,6 +88,7 @@ const ACTIONS_BY_GAME: Record<Game, PlayerAction[]> = {
   [Game.FACTORIO]: ["kick", "ban", "whitelist", "admin"], // /kick /ban /whitelist add /promote
   [Game.RUST]: ["kick", "ban", "admin"], // kickid / banid / moderatorid (steamid-based)
   [Game.BEAMMP]: [], // stdin console only; joins visible in logs
+  [Game.OPENTTD]: [], // no programmatic admin (in-game console only)
 };
 
 const CAPTURE_NOTES: Partial<Record<Game, string>> = {
@@ -181,7 +184,7 @@ export class SightingsService implements OnModuleInit {
 
   /** Names + platform ids from the game's own player-list command. */
   private async listDetailed(serverId: string, game: Game): Promise<{ name: string; playerId?: string }[]> {
-    if (game === Game.PALWORLD) {
+    if (game === Game.PALWORLD || game === Game.PALWORLD_WINE) {
       const out = await this.rcon.exec(serverId, "ShowPlayers");
       const players: { name: string; playerId?: string }[] = [];
       for (const l of out.split("\n").slice(1)) {
@@ -446,7 +449,7 @@ export class SightingsService implements OnModuleInit {
 
   /** What the game's kick/ban commands take: ids where required, else the name. */
   private rconSubject(game: Game, name: string, playerId: string | null): string {
-    if (game === Game.ASA || game === Game.ASE || game === Game.PALWORLD || game === Game.RUST) {
+    if (game === Game.ASA || game === Game.ASE || game === Game.PALWORLD || game === Game.PALWORLD_WINE || game === Game.RUST) {
       if (!playerId) {
         throw new BadRequestException(`No player id captured for ${name} yet — try while they're online.`);
       }

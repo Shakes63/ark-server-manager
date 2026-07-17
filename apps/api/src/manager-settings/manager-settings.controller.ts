@@ -9,6 +9,7 @@ class UpdateSettingsBody {
   @IsOptional() @IsString() timezone?: string;
   @IsOptional() @IsString() curseForgeApiKey?: string;
   @IsOptional() @IsString() steamWebApiKey?: string;
+  @IsOptional() @IsString() steamGridDbApiKey?: string;
   @IsOptional() @IsInt() @Min(1) @Max(500) backupKeep?: number;
   @IsOptional() @IsBoolean() autoStopOnStart?: boolean;
   @IsOptional() @IsString() pfsenseHost?: string;
@@ -46,6 +47,8 @@ export class ManagerSettingsController {
       await this.settings.set(SettingKeys.CurseForgeApiKey, body.curseForgeApiKey);
     if (body.steamWebApiKey)
       await this.settings.set(SettingKeys.SteamWebApiKey, body.steamWebApiKey);
+    if (body.steamGridDbApiKey)
+      await this.settings.set(SettingKeys.SteamGridDbApiKey, body.steamGridDbApiKey);
     if (body.backupKeep !== undefined)
       await this.settings.set(SettingKeys.BackupKeep, String(body.backupKeep));
     if (body.autoStopOnStart !== undefined)

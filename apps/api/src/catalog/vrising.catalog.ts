@@ -26,6 +26,16 @@ function gchoices(values: string[]): { value: string; label: string }[] {
 }
 
 const settings: SettingDef[] = [
+  // ── Version ──────────────────────────────────────────────────────────────────
+  // trueosiris BRANCH env → run a specific Steam branch. Empty = current release
+  // (skipped by vrisingCatalogEnv); "legacy-1.0.x-pc" pins the 1.0.x line.
+  vset("BRANCH", "Game version", "Version", "enum", "", {
+    choices: [
+      { value: "", label: "Current (latest)" },
+      { value: "legacy-1.0.x-pc", label: "Legacy 1.0.x" },
+    ],
+    help: "Which build of V Rising to run. Legacy pins the 1.0.x line. Changing it re-downloads the game on the next start.",
+  }),
   // ── Mode / PvP ────────────────────────────────────────────────────────────────
   vset("GAME_SETTINGS_GameModeType", "Game mode", "Mode", "enum", "PvP", {
     choices: gchoices(["PvP", "PvE"]),

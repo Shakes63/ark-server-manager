@@ -13,6 +13,15 @@ export interface ServerSummary {
   ports: PortSet;
   installedBuildId?: string | null;
   updateAvailable: boolean;
+  /** One or more installed mods have a newer version available (Valheim/Thunderstore
+   *  or a pinned Minecraft/CurseForge modpack). Refreshed by the mod-update poller. */
+  modUpdateAvailable: boolean;
+  /** Advanced: pinned game-image tag, or null to use the shipped default. */
+  imageTag?: string | null;
+  /** When the server is Crashed, why its container died: exit code (or OOM) plus a
+   *  log tail — or the launch error for a start that never got a container. Null
+   *  otherwise. Lets the UI explain a crash (e.g. a pinned image that won't boot). */
+  crashReason?: string | null;
   /** The game's server image is already pulled locally — "Install" (an image
    *  pull) would be a no-op, so the UI disables it. Game files install on Start. */
   imageReady: boolean;
@@ -31,9 +40,20 @@ export interface ServerSummary {
   modIds: number[];
   ramLimitMb?: number | null;
   cpuLimit?: number | null;
+  /** Per-server SteamGridDB art override (each field null = use the game default). */
+  artwork?: GameArtwork | null;
   createdAt: string;
   updatedAt: string;
 }
+
+/** One selectable SteamGridDB asset for the per-server artwork picker. */
+export interface ArtworkOption {
+  url: string;
+  thumb: string;
+}
+
+/** Art asset kinds a server can override. */
+export type ArtworkKind = "grid" | "hero" | "logo" | "icon";
 
 /** Live resource usage for a server. CPU/memory are null unless the container is
  *  up (Starting counts — boot is the heaviest period); disk (the on-disk instance
@@ -89,6 +109,37 @@ export interface HostStats {
 /** A single server's stats plus the host totals (the detail endpoint). */
 export type ServerStatsDetail = ServerStats & { host: HostStats };
 
+/** One available image tag from the registry. */
+export interface ImageTag {
+  name: string;
+  /** Last-pushed time (Docker Hub only; GHCR doesn't expose it cheaply). */
+  updatedAt?: string | null;
+}
+
+/** Available image tags for a game, for the advanced version picker. */
+export interface ImageTagsResult {
+  repo: string; // e.g. "ich777/openttdserver"
+  defaultTag: string; // the tag Palisade ships with
+  tags: ImageTag[]; // newest-first where the registry provides ordering
+}
+
+/** One selectable GAME version (distinct from the Docker image tag): the value the
+ *  wrapper image reads to install a specific build of the game itself. */
+export interface GameVersionOption {
+  value: string; // written to the game's version env (e.g. "1.20.4", "15.3", "testing")
+  label: string; // friendly label, may include a date
+  kind?: "default" | "release" | "snapshot" | "prerelease" | "branch";
+}
+
+/** Published game versions for a game, for the settings version dropdown. Populated
+ *  from the upstream source (Mojang manifest, GitHub releases) or a fixed branch set. */
+export interface GameVersionsResult {
+  /** The value that means "track the newest" — kept as the shipped default. */
+  defaultValue: string;
+  defaultLabel: string;
+  options: GameVersionOption[]; // newest-first
+}
+
 export interface CreateServerDto {
   name: string;
   game: Game;
@@ -103,6 +154,9 @@ export interface CreateServerDto {
   serverPassword?: string;
   spectatorPassword?: string;
   config?: ServerConfigValues;
+  /** Advanced: pin the game image to a specific tag instead of the shipped default
+   *  (null clears the pin). Applied on the next start (pull + recreate). */
+  imageTag?: string | null;
 }
 
 export type UpdateServerDto = Partial<CreateServerDto> & {
@@ -183,3 +237,15 @@ export interface RealtimeMessage<T = unknown> {
 export type Role = "viewer" | "operator" | "admin";
 export const ROLE_RANK: Record<Role, number> = { viewer: 0, operator: 1, admin: 2 };
 export const ROLES: Role[] = ["viewer", "operator", "admin"];
+
+/** Per-game artwork resolved from SteamGridDB (all URLs on their CDN; null = none found). */
+export interface GameArtwork {
+  /** 600x900 portrait cover ("grid"). */
+  grid: string | null;
+  /** Wide banner ("hero", e.g. 1920x620). */
+  hero: string | null;
+  /** Transparent title logo. */
+  logo: string | null;
+  /** Square icon. */
+  icon: string | null;
+}

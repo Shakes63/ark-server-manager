@@ -78,7 +78,7 @@ export class RconService {
     const game = server.game as Game;
     // Zomboid's RCON is Source-protocol but its replies also mismatch ids on some
     // builds — the lenient adapter handles it (and everything strict would).
-    const lenient = game === Game.CONAN || game === Game.PALWORLD || game === Game.ZOMBOID;
+    const lenient = game === Game.CONAN || game === Game.PALWORLD || game === Game.PALWORLD_WINE || game === Game.ZOMBOID;
     const rcon: RconConn =
       game === Game.SEVEN_DAYS ? new TelnetRcon(opts) : lenient ? new SourceRcon(opts) : new Rcon(opts);
     rcon.on("error", () => this.pool.delete(serverId));
@@ -130,7 +130,7 @@ export class RconService {
     const game = await this.gameOf(serverId);
     const message = rconArg(rawMessage);
     if (game === Game.CONAN) return this.exec(serverId, `broadcast ${message}`);
-    if (game === Game.PALWORLD) return this.exec(serverId, `Broadcast ${message}`);
+    if (game === Game.PALWORLD || game === Game.PALWORLD_WINE) return this.exec(serverId, `Broadcast ${message}`);
     if (game === Game.MINECRAFT) return this.exec(serverId, `say ${message}`);
     if (game === Game.SEVEN_DAYS) return this.exec(serverId, `say "${message}"`);
     if (game === Game.ZOMBOID) return this.exec(serverId, `servermsg "${message}"`);
@@ -145,7 +145,7 @@ export class RconService {
     // no manual-save command — it persists continuously to SQLite (flushes on shutdown).
     const game = await this.gameOf(serverId);
     if (game === Game.CONAN) return "Conan saves continuously to its database — no manual save needed.";
-    if (game === Game.PALWORLD) return this.exec(serverId, "Save");
+    if (game === Game.PALWORLD || game === Game.PALWORLD_WINE) return this.exec(serverId, "Save");
     if (game === Game.MINECRAFT) return this.exec(serverId, "save-all");
     if (game === Game.SEVEN_DAYS) return this.exec(serverId, "saveworld");
     if (game === Game.ZOMBOID) return this.exec(serverId, "save");
@@ -180,7 +180,7 @@ export class RconService {
         .filter((n): n is string => Boolean(n));
     }
     // Palworld `ShowPlayers` → CSV with a "name,playeruid,steamid" header row.
-    if (game === Game.PALWORLD) {
+    if (game === Game.PALWORLD || game === Game.PALWORLD_WINE) {
       const out = await this.exec(serverId, "ShowPlayers");
       return out
         .split("\n")

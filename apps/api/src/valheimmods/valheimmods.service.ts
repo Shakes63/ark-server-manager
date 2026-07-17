@@ -1,14 +1,11 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import { tmpdir } from "node:os";
 import { join, basename } from "node:path";
 import { Game, type ServerConfigValues } from "@ark/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { LocalPaths } from "../common/paths";
+import { extractZipSafe } from "../common/safe-extract";
 
-const execFileP = promisify(execFile);
 
 /** Thunderstore's Valheim package index (full community dump). Cached in memory. */
 const THUNDERSTORE_INDEX_URL = "https://thunderstore.io/c/valheim/api/v1/package/";
@@ -231,15 +228,8 @@ export class ValheimModsService {
     const dest = join(pluginsDir, pkg.fullName);
     await rm(dest, { recursive: true, force: true });
     await mkdir(dest, { recursive: true });
-    const tmp = join(tmpdir(), `valheimmod-${process.pid}-${Date.now()}.zip`);
-    await writeFile(tmp, buf);
-    try {
-      await execFileP("unzip", ["-o", tmp, "-d", dest]);
-    } catch (e) {
-      throw new BadRequestException(`Could not unzip ${pkg.fullName}: ${(e as Error).message}`);
-    } finally {
-      await rm(tmp, { force: true }).catch(() => undefined);
-    }
+    // Thunderstore zips are untrusted internet content → traversal-safe extraction.
+    await extractZipSafe(buf, dest);
   }
 
   /** Flip the server's BEPINEX catalog setting on so the framework loads the mods. */

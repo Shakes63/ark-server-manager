@@ -2,7 +2,7 @@
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Play, Square, RotateCw, Download, Loader2, Pencil, Check, X, Trash2, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Play, Square, RotateCw, Download, Loader2, Pencil, Check, X, Trash2, AlertTriangle, Image as ImageIcon } from "lucide-react";
 import { mapLabel, Game, ServerState, type ServerSummary, type ServerConfigValues } from "@ark/shared";
 import { apiGet, apiPost, apiPatch, apiDelete, apiDownload } from "@/lib/api";
 import { useRealtime } from "@/lib/socket";
@@ -18,6 +18,8 @@ import { ServerAccessCard } from "@/components/server-access-card";
 import { AccessListsCard } from "@/components/access-lists-card";
 import { PortsCard } from "@/components/ports-card";
 import { GeneralCard } from "@/components/general-card";
+import { ImageVersionCard } from "@/components/image-version-card";
+import { CrashBanner } from "@/components/crash-banner";
 import { PortForwardsCard } from "@/components/port-forwards-card";
 import { LogsTab } from "@/components/logs-tab";
 import { ScheduleList } from "@/components/schedule-list";
@@ -29,6 +31,9 @@ import { BedrockModsTab } from "@/components/bedrock-mods-tab";
 import { SevenDaysModsTab } from "@/components/sevendays-mods-tab";
 import { ValheimModsTab } from "@/components/valheim-mods-tab";
 import { useStartGuard } from "@/components/start-guard";
+import { useArtwork } from "@/lib/use-artwork";
+import { useRole } from "@/lib/use-role";
+import { ArtworkPicker } from "@/components/artwork-picker";
 import { BackupsTab } from "@/components/backups-tab";
 import { PlayersTab } from "@/components/players-tab";
 
@@ -39,6 +44,9 @@ export default function ServerDetailPage({ params }: { params: Promise<{ id: str
   const { id } = use(params);
   const router = useRouter();
   const [server, setServer] = useState<ServerSummary | null>(null);
+  const artwork = useArtwork();
+  const role = useRole();
+  const [pickingArt, setPickingArt] = useState(false);
   const [config, setConfig] = useState<ServerConfigValues | null>(null);
   const [configKey, setConfigKey] = useState(0); // bump to remount the editor on copy-in
   const [tab, setTab] = useState<Tab>("Overview");
@@ -143,6 +151,15 @@ export default function ServerDetailPage({ params }: { params: Promise<{ id: str
 
   if (!server) return <div className="text-slate-400">Loading…</div>;
 
+  // Onscreen art = per-server override winning over the game-wide default.
+  const def = artwork[server.game];
+  const art = {
+    grid: server.artwork?.grid ?? def?.grid ?? null,
+    hero: server.artwork?.hero ?? def?.hero ?? null,
+    logo: server.artwork?.logo ?? def?.logo ?? null,
+    icon: server.artwork?.icon ?? def?.icon ?? null,
+  };
+
   // Button availability follows the server state machine; `pending` covers the
   // click→response gap so a button can't be re-clicked before its state lands.
   const st = server.state;
@@ -169,7 +186,7 @@ export default function ServerDetailPage({ params }: { params: Promise<{ id: str
             ? new Set<Tab>(["Console", "Mods"]) // no RCON, no mod support
             : server.game === Game.VRISING || server.game === Game.FACTORIO || server.game === Game.RUST
               ? new Set<Tab>(["Mods"]) // RCON console, but no mod browser
-              : server.game === Game.SOTF || server.game === Game.SATISFACTORY || server.game === Game.LIF || server.game === Game.ATS || server.game === Game.ETS2 || server.game === Game.CORE_KEEPER || server.game === Game.TERRARIA || server.game === Game.BEAMMP
+              : server.game === Game.SOTF || server.game === Game.SATISFACTORY || server.game === Game.LIF || server.game === Game.ATS || server.game === Game.ETS2 || server.game === Game.CORE_KEEPER || server.game === Game.TERRARIA || server.game === Game.BEAMMP || server.game === Game.OPENTTD
                 ? new Set<Tab>(["Console", "Mods"]) // no RCON/console, no mod browser
                 : new Set<Tab>();
   const visibleTabs = TABS.filter((t) => !hiddenTabs.has(t));
@@ -180,6 +197,42 @@ export default function ServerDetailPage({ params }: { params: Promise<{ id: str
       <Link href="/" className="inline-flex items-center gap-1 text-sm text-slate-400 hover:text-slate-200">
         <ArrowLeft className="h-4 w-4" /> All servers
       </Link>
+
+      {art.hero && (
+        <div className="relative -mt-1 overflow-hidden rounded-xl ring-1 ring-black/40">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={art.hero} alt="" className="h-40 w-full object-cover sm:h-48" loading="lazy" />
+          {/* Fade the bottom into the page so the banner reads as a header, not a photo. */}
+          <div className="absolute inset-0 bg-gradient-to-t from-ark-bg via-ark-bg/30 to-transparent" />
+          {art.logo && (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              src={art.logo}
+              alt=""
+              className="absolute bottom-3 left-4 max-h-16 max-w-[55%] object-contain drop-shadow-lg"
+              loading="lazy"
+            />
+          )}
+          {role !== "viewer" && (
+            <button
+              onClick={() => setPickingArt(true)}
+              className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-md bg-black/50 px-2 py-1 text-xs text-slate-200 backdrop-blur hover:bg-black/70"
+            >
+              <ImageIcon className="h-3.5 w-3.5" /> Change artwork
+            </button>
+          )}
+        </div>
+      )}
+
+      {pickingArt && (
+        <ArtworkPicker
+          serverId={id}
+          game={server.game}
+          current={server.artwork}
+          onClose={() => setPickingArt(false)}
+          onSaved={(updated) => setServer(updated)}
+        />
+      )}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
@@ -213,6 +266,15 @@ export default function ServerDetailPage({ params }: { params: Promise<{ id: str
               >
                 <Pencil className="h-4 w-4" />
               </button>
+              {role !== "viewer" && !art.hero && (
+                <button
+                  onClick={() => setPickingArt(true)}
+                  className="text-slate-400 hover:text-slate-200"
+                  title="Choose artwork"
+                >
+                  <ImageIcon className="h-4 w-4" />
+                </button>
+              )}
             </>
           )}
           <StateBadge state={server.state} />
@@ -278,7 +340,7 @@ export default function ServerDetailPage({ params }: { params: Promise<{ id: str
           <div className="text-slate-400">Loading settings…</div>
         ))}
       {tab === "Mods" &&
-        (server.game === Game.PALWORLD ? (
+        (server.game === Game.PALWORLD || server.game === Game.PALWORLD_WINE ? (
           <PalworldModsTab serverId={id} />
         ) : server.game === Game.MINECRAFT ? (
           <MinecraftModsTab serverId={id} />
@@ -456,9 +518,10 @@ function Overview({ server, onChanged }: { server: ServerSummary; onChanged: () 
   const isFactorio = server.game === Game.FACTORIO;
   const isRust = server.game === Game.RUST;
   const isBeammp = server.game === Game.BEAMMP;
-  const noQuery = isMc || isBedrock || isSdtd || isZomboid || isSatisfactory || isCoreKeeper || isTerraria || isFactorio || isBeammp; // Valheim/Enshrouded/V Rising have a real query port; Zomboid's + Satisfactory's mirror the game port
-  const noRcon = isIcarus || isBedrock || isValheim || isSdtd || isEnshrouded || isSotf || isSatisfactory || isLif || isAts || isCoreKeeper || isTerraria || isBeammp; // 7DTD's console is telnet
-  const noMods = isIcarus || isBedrock || isValheim || isSdtd || isEnshrouded || isVRising || isSotf || isSatisfactory || isLif || isAts || isCoreKeeper || isTerraria || isFactorio || isRust || isBeammp;
+  const isOpenttd = server.game === Game.OPENTTD;
+  const noQuery = isMc || isBedrock || isSdtd || isZomboid || isSatisfactory || isCoreKeeper || isTerraria || isFactorio || isBeammp || isOpenttd; // Valheim/Enshrouded/V Rising have a real query port; Zomboid/Satisfactory/OpenTTD answer queries on the game port
+  const noRcon = isIcarus || isBedrock || isValheim || isSdtd || isEnshrouded || isSotf || isSatisfactory || isLif || isAts || isCoreKeeper || isTerraria || isBeammp || isOpenttd; // 7DTD's console is telnet; OpenTTD's is in-game only
+  const noMods = isIcarus || isBedrock || isValheim || isSdtd || isEnshrouded || isVRising || isSotf || isSatisfactory || isLif || isAts || isCoreKeeper || isTerraria || isFactorio || isRust || isBeammp || isOpenttd;
   const row = (k: string, v: string): [string, string] => [k, v];
   const rows: [string, string][] = [
     row("Game", server.game),
@@ -475,6 +538,7 @@ function Overview({ server, onChanged }: { server: ServerSummary; onChanged: () 
   ];
   return (
     <div className="space-y-6">
+      <CrashBanner server={server} />
       <ResourcesPanel serverId={server.id} state={server.state} />
       <div className="card">
         <dl className="grid gap-x-8 gap-y-3 sm:grid-cols-2">
@@ -515,6 +579,7 @@ function Overview({ server, onChanged }: { server: ServerSummary; onChanged: () 
       <GeneralCard server={server} onSaved={onChanged} />
       <ServerAccessCard server={server} onSaved={onChanged} />
       {!isCoreKeeper && <PortsCard server={server} onSaved={onChanged} />}
+      <ImageVersionCard server={server} onSaved={onChanged} />
       {!isCoreKeeper && <PortForwardsCard serverId={server.id} />}
       {/* File-managed access lists (Valheim/Bedrock/7DTD); RCON games use the Console. */}
       {(isValheim || isBedrock || isSdtd) && <AccessListsCard serverId={server.id} />}

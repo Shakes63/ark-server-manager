@@ -14,6 +14,8 @@ export default function SettingsPage() {
   const [timezone, setTimezone] = useState("");
   const [curseForgeApiKey, setCurseForgeApiKey] = useState("");
   const [steamWebApiKey, setSteamWebApiKey] = useState("");
+  const [steamGridDbApiKey, setSteamGridDbApiKey] = useState("");
+  const [artMsg, setArtMsg] = useState<string | null>(null);
   const [backupKeep, setBackupKeep] = useState("10");
   const [autoStop, setAutoStop] = useState(true);
   const [pfsenseHost, setPfsenseHost] = useState("");
@@ -49,6 +51,7 @@ export default function SettingsPage() {
       if (timezone) settingsBody.timezone = timezone;
       if (curseForgeApiKey) settingsBody.curseForgeApiKey = curseForgeApiKey;
       if (steamWebApiKey) settingsBody.steamWebApiKey = steamWebApiKey;
+      if (steamGridDbApiKey) settingsBody.steamGridDbApiKey = steamGridDbApiKey;
       const keep = parseInt(backupKeep, 10);
       if (Number.isFinite(keep) && keep >= 1) settingsBody.backupKeep = keep;
       settingsBody.autoStopOnStart = autoStop;
@@ -58,6 +61,7 @@ export default function SettingsPage() {
       if (Object.keys(settingsBody).length) await apiPatch("/settings", settingsBody);
       setCurseForgeApiKey("");
       setSteamWebApiKey("");
+      setSteamGridDbApiKey("");
       setPfsenseApiKey("");
       setSaved(true);
       load();
@@ -65,6 +69,21 @@ export default function SettingsPage() {
       alert((err as Error).message);
     } finally {
       setBusy(false);
+    }
+  };
+
+  // Fetches art for every game with the SAVED key — save first if the field is dirty.
+  const fetchArtwork = async () => {
+    setArtMsg("Fetching…");
+    try {
+      const r = await apiPost<{ fetched: number; missing: number }>("/artwork/refresh");
+      setArtMsg(
+        r.fetched > 0
+          ? `Found art for ${r.fetched} game${r.fetched === 1 ? "" : "s"} (reload to see it).`
+          : "No art fetched — save a valid SteamGridDB key first.",
+      );
+    } catch (err) {
+      setArtMsg((err as Error).message);
     }
   };
 
@@ -102,6 +121,32 @@ export default function SettingsPage() {
           onChange={setSteamWebApiKey}
           configured={configured("steam_web_api_key")}
         />
+        <div className="space-y-2 border-t border-ark-border/60 pt-4">
+          <SecretField
+            label="SteamGridDB API key (cover art + banners)"
+            value={steamGridDbApiKey}
+            onChange={setSteamGridDbApiKey}
+            configured={configured("steamgriddb_api_key")}
+          />
+          <p className="text-xs text-slate-500">
+            Adds cover art to server cards and a banner to each server page. Free key from{" "}
+            <a
+              href="https://www.steamgriddb.com/profile/preferences/api"
+              target="_blank"
+              rel="noreferrer"
+              className="text-ark-accent hover:underline"
+            >
+              steamgriddb.com
+            </a>
+            . Save the key first, then fetch — art is cached, so this is a one-time pull.
+          </p>
+          <div className="flex items-center gap-2">
+            <button type="button" className="btn-secondary" onClick={fetchArtwork}>
+              <Send className="h-4 w-4" /> Fetch artwork
+            </button>
+            {artMsg && <span className="text-sm text-slate-400">{artMsg}</span>}
+          </div>
+        </div>
       </div>
 
       <UsersCard />

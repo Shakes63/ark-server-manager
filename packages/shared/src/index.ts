@@ -1,4 +1,5 @@
 export * from "./game";
+export * from "./version-pinning";
 export * from "./server-state";
 export * from "./settings-catalog";
 export * from "./settings-rules";

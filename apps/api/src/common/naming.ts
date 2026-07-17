@@ -10,6 +10,7 @@ const CONTAINER_PREFIX: Record<Game, string> = {
   [Game.ASE]: "ark",
   [Game.CONAN]: "conan",
   [Game.PALWORLD]: "palworld",
+  [Game.PALWORLD_WINE]: "palworld-wine",
   [Game.MINECRAFT]: "minecraft",
   [Game.ICARUS]: "icarus",
   [Game.BEDROCK]: "bedrock",
@@ -28,6 +29,7 @@ const CONTAINER_PREFIX: Record<Game, string> = {
   [Game.FACTORIO]: "factorio",
   [Game.RUST]: "rust",
   [Game.BEAMMP]: "beammp",
+  [Game.OPENTTD]: "openttd",
 };
 
 function slug(s: string): string {

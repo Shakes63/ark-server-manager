@@ -8,6 +8,7 @@ export enum EventType {
   InstallProgress = "InstallProgress",
   InstallFinished = "InstallFinished",
   UpdateAvailable = "UpdateAvailable",
+  ModUpdateAvailable = "ModUpdateAvailable",
   BackupCreated = "BackupCreated",
   RconCommand = "RconCommand",
   PlayerJoin = "PlayerJoin",

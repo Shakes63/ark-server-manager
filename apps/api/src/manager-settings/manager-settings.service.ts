@@ -12,6 +12,8 @@ export const SettingKeys = {
   NotificationTargets: "notification_targets", // secret (JSON; webhook URLs grant post access)
   BackupReplication: "backup_replication", // secret (JSON; holds SFTP credentials)
   BackupReplicationStatus: "backup_replication_status", // non-secret sync status JSON
+  SteamGridDbApiKey: "steamgriddb_api_key", // secret
+  ArtworkCache: "artwork_cache", // non-secret JSON: per-game SGDB art URLs
   BackupKeep: "backup_keep",
   AutoStopOnStart: "auto_stop_on_start",
   // pfSense REST API (jaredhendrickson13 package) for one-click port-forwards.
@@ -30,6 +32,7 @@ const SECRET_KEYS = new Set<string>([
   SettingKeys.PfsenseApiKey,
   SettingKeys.NotificationTargets,
   SettingKeys.BackupReplication,
+  SettingKeys.SteamGridDbApiKey,
 ]);
 
 /** Fallback timezone when the user hasn't picked one yet (matches the web default). */

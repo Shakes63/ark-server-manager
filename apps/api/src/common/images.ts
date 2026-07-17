@@ -17,6 +17,7 @@ export const IMAGES: Record<Game, string> = {
   // thijsvanloef/palworld-server-docker — env-driven; installs app 2394010 via
   // SteamCMD on boot, compiles PalWorldSettings.ini from env, has RCON.
   [Game.PALWORLD]: "thijsvanloef/palworld-server-docker:latest",
+  [Game.PALWORLD_WINE]: "ghcr.io/ripps818/docker-palworld-dedicated-server-wine:latest",
   // itzg/minecraft-server — the canonical Minecraft image. Downloads the server
   // jar (vanilla/Paper/Forge/Fabric) itself on first boot into /data, writes
   // server.properties from env vars, and has built-in RCON.
@@ -90,6 +91,7 @@ export const IMAGES: Record<Game, string> = {
   // admin-password field). The server is a lightweight relay — physics run on the
   // clients. NO RCON/query; console is stdin-only.
   [Game.BEAMMP]: "rouhim/beammp-server:latest",
+  [Game.OPENTTD]: "ich777/openttdserver:latest",
 };
 
 /** POK keeps all instance data (install + saves + config) under this path. */
@@ -181,8 +183,43 @@ export const RUST_DATA_DIR = "/steamcmd/rust";
 
 /** BeamMP (rouhim): client-mod zips (maps/vehicles sent to joiners) + server-side
  *  Lua plugins. There's no world state — these ARE the persistent data. */
+/** A valid Docker image tag: starts with a word char, then word chars / . / - (max 128).
+ *  Used to validate a user-pinned tag before it's spliced into an image ref. */
+export const IMAGE_TAG_RE = /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/;
+
+/** Split a full image ref ("repo:tag") into repo + tag. The tag separator is the LAST
+ *  colon after the last slash — a registry-port colon (e.g. "host:5000/repo") comes
+ *  before the slash and must not be mistaken for a tag. */
+export function splitImageRef(ref: string): { repo: string; tag: string } {
+  const colon = ref.lastIndexOf(":");
+  const slash = ref.lastIndexOf("/");
+  if (colon > slash) return { repo: ref.slice(0, colon), tag: ref.slice(colon + 1) };
+  return { repo: ref, tag: "latest" };
+}
+
+/** The image repository for a game (no tag), e.g. "ich777/openttdserver". */
+export function imageRepoFor(game: Game): string {
+  return splitImageRef(IMAGES[game]).repo;
+}
+
+/** The default (shipped) image tag for a game, e.g. "latest" or "2_1_latest". */
+export function defaultImageTagFor(game: Game): string {
+  return splitImageRef(IMAGES[game]).tag;
+}
+
+/** The image ref to actually run: the game's repo with its tag replaced by `pinned`
+ *  when the server pins one, else the shipped default tag. */
+export function imageRefFor(game: Game, pinned?: string | null): string {
+  const { repo, tag } = splitImageRef(IMAGES[game]);
+  const t = pinned?.trim();
+  return `${repo}:${t && IMAGE_TAG_RE.test(t) ? t : tag}`;
+}
+
 export const BEAMMP_CLIENT_MODS_DIR = "/beammp/Resources/Client";
 export const BEAMMP_SERVER_MODS_DIR = "/beammp/Resources/Server";
+// OpenTTD (ich777): DATA_DIR is /serverdata; SERVER_DIR is /serverdata/serverfiles, with
+// config at serverfiles/.config/openttd and saves at serverfiles/.local/share/openttd.
+export const OPENTTD_DATA_DIR = "/serverdata";
 
 /**
  * The uid/gid each image runs the server as. Neither chowns its mounts fully
@@ -194,6 +231,7 @@ export const SERVER_UID: Record<Game, number> = {
   [Game.ASE]: 1000, // hermsi's "steam" user
   [Game.CONAN]: 1000, // Conan image's "pokuser"
   [Game.PALWORLD]: 1000, // palworld image's "steam" user
+  [Game.PALWORLD_WINE]: 1000, // ripps818 wine image runs as steam:steam too
   [Game.MINECRAFT]: 1000, // itzg's default UID (overridable via UID/GID env)
   [Game.ICARUS]: 4711, // mornedhels default (overridable via PUID/PGID); unused — env-driven, no INI injection
   [Game.BEDROCK]: 1000, // itzg derives UID/GID from /data owner; we pass PUID/PGID. Unused here.
@@ -212,12 +250,14 @@ export const SERVER_UID: Record<Game, number> = {
   [Game.FACTORIO]: 845, // the image's "factorio" user, remapped via PUID/PGID (we pass ours)
   [Game.RUST]: 0, // didstopia runs as root
   [Game.BEAMMP]: 0, // rouhim runs as root (mod dirs world-writable per its docs)
+  [Game.OPENTTD]: 99, // ich777 wrapper (UID/GID env = PUID/PGID)
 };
 export const SERVER_GID: Record<Game, number> = {
   [Game.ASA]: 7777,
   [Game.ASE]: 1000,
   [Game.CONAN]: 1000,
   [Game.PALWORLD]: 1000,
+  [Game.PALWORLD_WINE]: 1000,
   [Game.MINECRAFT]: 1000,
   [Game.ICARUS]: 4711,
   [Game.BEDROCK]: 1000,
@@ -236,4 +276,5 @@ export const SERVER_GID: Record<Game, number> = {
   [Game.FACTORIO]: 845,
   [Game.RUST]: 0,
   [Game.BEAMMP]: 0,
+  [Game.OPENTTD]: 100,
 };

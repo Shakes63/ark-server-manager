@@ -20,6 +20,7 @@ export const NOTIFY_EVENT_GROUPS: { key: string; label: string; types: EventType
   { key: "problems", label: "Crashes, warnings & errors", types: [EventType.Warning, EventType.Error] },
   { key: "state", label: "Server start / stop transitions", types: [EventType.StateTransition] },
   { key: "updates", label: "Game updates available", types: [EventType.UpdateAvailable] },
+  { key: "mod-updates", label: "Mod updates available", types: [EventType.ModUpdateAvailable] },
   { key: "installs", label: "Installs finished", types: [EventType.InstallFinished] },
   { key: "backups", label: "Backups created", types: [EventType.BackupCreated] },
   { key: "schedules", label: "Schedules fired", types: [EventType.ScheduleFired] },
@@ -31,5 +32,6 @@ export const DEFAULT_NOTIFY_EVENTS: EventType[] = [
   EventType.Warning,
   EventType.Error,
   EventType.UpdateAvailable,
+  EventType.ModUpdateAvailable,
   EventType.BackupCreated,
 ];

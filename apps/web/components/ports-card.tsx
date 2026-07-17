@@ -14,6 +14,7 @@ const HAS_RCON_PORT = new Set<Game>([
   Game.ASE,
   Game.CONAN,
   Game.PALWORLD,
+  Game.PALWORLD_WINE,
   Game.MINECRAFT,
   Game.SEVEN_DAYS,
   Game.VRISING,

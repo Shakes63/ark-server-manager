@@ -4,6 +4,7 @@ import { ASA_CATALOG } from "./asa.catalog";
 import { ASE_CATALOG } from "./ase.catalog";
 import { CONAN_CATALOG } from "./conan.catalog";
 import { PALWORLD_CATALOG } from "./palworld.catalog";
+import { PALWORLD_WINE_CATALOG } from "./palworld-wine.catalog";
 import { MINECRAFT_CATALOG } from "./minecraft.catalog";
 import { ICARUS_CATALOG } from "./icarus.catalog";
 import { BEDROCK_CATALOG } from "./bedrock.catalog";
@@ -21,6 +22,7 @@ import { TERRARIA_CATALOG } from "./terraria.catalog";
 import { FACTORIO_CATALOG } from "./factorio.catalog";
 import { RUST_CATALOG } from "./rust.catalog";
 import { BEAMMP_CATALOG } from "./beammp.catalog";
+import { OPENTTD_CATALOG } from "./openttd.catalog";
 import { serializeGameIni, serializeGameUserSettings } from "./ini-serializer";
 
 @Injectable()
@@ -30,6 +32,7 @@ export class CatalogService {
     if (game === Game.ASE) return ASE_CATALOG;
     if (game === Game.CONAN) return CONAN_CATALOG;
     if (game === Game.PALWORLD) return PALWORLD_CATALOG;
+    if (game === Game.PALWORLD_WINE) return PALWORLD_WINE_CATALOG;
     if (game === Game.MINECRAFT) return MINECRAFT_CATALOG;
     if (game === Game.ICARUS) return ICARUS_CATALOG;
     if (game === Game.BEDROCK) return BEDROCK_CATALOG;
@@ -48,6 +51,7 @@ export class CatalogService {
     if (game === Game.FACTORIO) return FACTORIO_CATALOG;
     if (game === Game.RUST) return RUST_CATALOG;
     if (game === Game.BEAMMP) return BEAMMP_CATALOG;
+    if (game === Game.OPENTTD) return OPENTTD_CATALOG;
     throw new NotFoundException(`Unknown game: ${game}`);
   }
 

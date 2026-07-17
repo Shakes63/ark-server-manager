@@ -10,7 +10,23 @@ container spawns and supervises a container per game server, manages every
 setting through schema-driven forms, and handles mods, backups, schedules,
 player administration, and even your router's port-forwards.
 
-**Supported games (22):**
+## Quick start (Unraid)
+
+1. **Apps tab → search "Palisade" → Install.** The defaults are ready to go — the
+   only field to check is **App data**: point it at a folder on a real disk
+   (`/mnt/cache/appdata/palisade`), *not* the `/mnt/user` FUSE share, so the game-file
+   cache can reflink-clone between servers.
+2. **Leave the secrets and `HOST_DATA_DIR` blank.** The manager generates and persists
+   its own keys on first start and auto-detects the host data path — there's nothing to
+   generate in a terminal.
+3. **Open the WebUI**, create your admin account on the first-run screen, and add a game
+   server. That's it.
+
+> Not on Unraid? It's a single container — run the same image (`ghcr.io/shakes63/palisade`)
+> with `/var/run/docker.sock` and a data volume mounted; see the template in
+> [`unraid/palisade.xml`](unraid/palisade.xml) for the full env/mount list.
+
+**Supported games (24):**
 
 | Game | Runtime | Console | Mods |
 |---|---|---|---|
@@ -18,6 +34,7 @@ player administration, and even your router's port-forwards.
 | ARK: Survival Evolved | native | RCON | Steam Workshop browser |
 | Conan Exiles | native | RCON | Steam Workshop browser |
 | Palworld | native | RCON | UE4SS (Linux)/pak uploader [^pal] |
+| Palworld (Wine — full mods) | Wine (ripps818) | RCON | UE4SS (Windows) + DLL mods/pak uploader [^palwine] |
 | Minecraft (Java) | native (itzg) | RCON | CurseForge modpacks (auto-install) |
 | Minecraft Bedrock | native (itzg) | — | add-on pack uploader |
 | Icarus | Wine | — | .pak uploader |
@@ -36,6 +53,7 @@ player administration, and even your router's port-forwards.
 | Factorio | native | RCON | mods folder (+ mod-portal auto-update) |
 | Rust | native | RCON | Oxide/uMod toggle (plugins folder) |
 | BeamNG.drive (BeamMP) | native | — | client-mod + Lua plugin folders |
+| OpenTTD | native (ich777) | in-game console | — (NewGRFs via in-game content) |
 
 [^pal]: Palworld runs the **native Linux** server, so mods are `.pak` content mods plus
     Lua/Blueprint mods loaded by UE4SS. Official UE4SS releases are Windows-only — there is no
@@ -44,6 +62,13 @@ player administration, and even your router's port-forwards.
     (`UE4SS_0.0.0.zip`) and upload it in the server's Mods tab. DLL-based mods (PalGuard,
     PalDefender) cannot load into a Linux process; those require running the Windows server
     under Wine, which this image does not do.
+
+[^palwine]: The **Palworld (Wine — full mods)** variant runs the **Windows** server under Wine,
+    so DLL-based mods (PalGuard, PalDefender) load alongside Lua/Blueprint and `.pak` mods. The
+    Mods tab installs the official
+    [UE4SS Windows build](https://github.com/UE4SS-RE/RE-UE4SS/releases/tag/v3.0.1) into
+    `Pal/Binaries/Win64`, where Wine auto-loads it via the `dwmapi.dll` proxy — no LD_PRELOAD.
+    Heavier and crashier than the native variant; pick it only when you need DLL mods.
 
 **Feature highlights**
 
@@ -210,6 +235,23 @@ does both). Database migrations run automatically on boot. Prefer a fixed
 version over `latest`? Point the template at a specific `vX.Y.Z` tag — any
 published release remains pullable as a rollback pin.
 
+**Channels:**
+
+| Tag | Moves when | For |
+| --- | --- | --- |
+| `latest` | a `vX.Y.Z` release is cut | most people |
+| `vX.Y.Z` / `vX.Y` | that release | pinning / rollback |
+| `nightly` | a nightly build is manually triggered | early testing, bleeding edge |
+| `sha-<short>` | every build | immutable pin of an exact build |
+
+`nightly` is a prerelease of unreleased `main` code (versioned like
+`1.3.2-nightly.202607110245`) — expect rough edges, and note it may apply DB
+migrations a later rollback to a stable release can't undo (Prisma migrates
+forward only), so back up first. It never moves `latest`, so stable users
+can't see it. Opting in and out is just which tag your container tracks:
+point the image at `ghcr.io/shakes63/palisade:nightly` to ride prereleases,
+and back at `:latest` to rejoin stable at the next release.
+
 ---
 
 ## Integrations (all optional, all in Settings)
@@ -305,6 +347,7 @@ wouldn't exist without them:
 | Conan Exiles | `acekorneya/conan_enhanced_server` | [Acekorneya (POK)](https://github.com/Acekorneya/POK_Conan_Enhanced_Docker_server) |
 | ARK: Survival Evolved | `hermsi/ark-server` | [Hermsi1337](https://github.com/Hermsi1337/docker-ark-server) |
 | Palworld | `thijsvanloef/palworld-server-docker` | [Thijs van Loef](https://github.com/thijsvanloef/palworld-server-docker) |
+| Palworld (Wine — full mods) | `ripps818/docker-palworld-dedicated-server-wine` | [ripps818](https://github.com/ripps818/docker-palworld-dedicated-server) |
 | Minecraft (Java) | `itzg/minecraft-server` | [itzg (Geoff Bourne)](https://github.com/itzg/docker-minecraft-server) |
 | Minecraft Bedrock | `itzg/minecraft-bedrock-server` | [itzg (Geoff Bourne)](https://github.com/itzg/docker-minecraft-bedrock-server) |
 | Icarus | `mornedhels/icarus-server` | [mornedhels](https://github.com/mornedhels/icarus-server) |

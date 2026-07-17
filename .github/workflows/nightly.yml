@@ -1,0 +1,111 @@
+name: Nightly image
+
+# PRERELEASE channel, manual-only: fire it with `gh workflow run nightly.yml`
+# (or the Actions tab) when there's something on main worth testing. No
+# schedule, no on-push — a nightly exists only when you ask for one.
+#
+# What it publishes: `ghcr.io/shakes63/palisade:nightly` plus an immutable
+# `sha-<short>` pin. It NEVER touches `latest` or the semver tags, so stable
+# (Community Applications) users can't see it. A box opts in by pointing its
+# container at `:nightly` (scripts/deploy-unraid.sh tower nightly) and rejoins
+# stable by pointing back at `:latest` — the tag you track IS the channel.
+#
+# The image self-identifies as a prerelease: package.json's version is stamped
+# to `<base>-nightly.<UTC timestamp>` in the workflow workspace only — nothing
+# is committed and no tags land in the repo. Same audit + Trivy gates as the
+# stable pipeline.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Audit production dependencies (fail on high+)
+        run: pnpm audit --prod --audit-level high
+
+  build-and-push:
+    runs-on: ubuntu-latest
+    needs: audit
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Stamp prerelease version (workspace only — never committed)
+        id: ver
+        run: |
+          BASE=$(node -p "require('./package.json').version")
+          NIGHTLY="${BASE}-nightly.$(date -u +%Y%m%d%H%M)"
+          node -e "
+            const fs = require('fs');
+            const p = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            p.version = '${NIGHTLY}';
+            fs.writeFileSync('package.json', JSON.stringify(p, null, 2) + '\n');
+          "
+          echo "version=${NIGHTLY}" >> "$GITHUB_OUTPUT"
+          echo "Stamped ${NIGHTLY}"
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Derive image tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/shakes63/palisade
+          # Deliberately no `latest` and no semver tags here — structurally
+          # impossible for a nightly to reach the stable channel.
+          tags: |
+            type=raw,value=nightly
+            type=sha,format=short
+          labels: |
+            org.opencontainers.image.version=${{ steps.ver.outputs.version }}
+
+      - name: Build (amd64 — Unraid), load for scanning
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          load: true
+          platforms: linux/amd64
+          tags: ghcr.io/shakes63/palisade:scan
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Trivy scan (block on CRITICAL)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ghcr.io/shakes63/palisade:scan
+          format: table
+          exit-code: "1"
+          severity: CRITICAL
+          ignore-unfixed: true
+
+      - name: Push (reuses the scanned build from cache)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha

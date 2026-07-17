@@ -1,15 +1,12 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { mkdir, readdir, readFile, rm, writeFile, stat } from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import { tmpdir } from "node:os";
 import { join, basename } from "node:path";
 import { Game, type ServerConfigValues } from "@ark/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { LocalPaths } from "../common/paths";
+import { extractZipSafe } from "../common/safe-extract";
 
-const execFileP = promisify(execFile);
 
 /** UE4SS drops its loader here; the server is launched with this on LD_PRELOAD
  *  (set by buildPalworldSpec when the framework is enabled). Official UE4SS is
@@ -30,15 +27,35 @@ export const UE4SS_LINUX = {
   releasePage: "https://github.com/Yangff/RE-UE4SS/releases/tag/linux-experiment",
 } as const;
 
+/**
+ * The official Windows UE4SS build, for the Wine variant. Under Wine the loader is a
+ * proxy DLL (dwmapi.dll) that the game auto-loads from Pal/Binaries/Win64 — no
+ * LD_PRELOAD, and DLL-based mods (PalGuard, PalDefender) load normally. Pinned like
+ * the Linux asset; bump both fields together.
+ */
+export const UE4SS_WINDOWS = {
+  url: "https://github.com/UE4SS-RE/RE-UE4SS/releases/download/v3.0.1/UE4SS_v3.0.1.zip",
+  sha256: "4b47d4bceddd2f561a4e395bfa00924ccfc945af576a2d0c613e6537846c57ec",
+  releasePage: "https://github.com/UE4SS-RE/RE-UE4SS/releases/tag/v3.0.1",
+} as const;
+
+/** Wine loads UE4SS via this proxy DLL (auto-loaded, no LD_PRELOAD). */
+export const PAL_FRAMEWORK_WINE_LOADER = "Pal/Binaries/Win64/dwmapi.dll";
+
 const UE4SS_DOWNLOAD_TIMEOUT_MS = 60_000;
 
 /**
  * Palworld isn't on Steam Workshop, so mods are managed as files in the bind-mounted
- * instance dir: .pak content mods in Pal/Content/Paks/~mods, and a server-side mod
- * framework (UE4SS) in Pal/Binaries/Linux loaded via LD_PRELOAD.
+ * instance dir: .pak content mods in Pal/Content/Paks/~mods, plus a server-side mod
+ * framework (UE4SS).
  *
- * We run the native Linux binary, so only Lua/Blueprint mods load. DLL-based mods
- * (PalGuard, PalDefender) need the Windows server under Wine and cannot work here.
+ * Two variants, chosen by the server's Game:
+ *  - PALWORLD (native Linux): the experimental libUE4SS.so in Pal/Binaries/Linux,
+ *    loaded via LD_PRELOAD. Only Lua/Blueprint mods load — DLL mods can't enter a
+ *    Linux process.
+ *  - PALWORLD_WINE (Windows server under Wine): the official UE4SS Windows build in
+ *    Pal/Binaries/Win64, auto-loaded by the dwmapi.dll proxy (no LD_PRELOAD). DLL
+ *    mods (PalGuard, PalDefender) load normally here.
  */
 @Injectable()
 export class PalModsService {
@@ -47,20 +64,30 @@ export class PalModsService {
   private async palServer(id: string) {
     const s = await this.prisma.server.findUnique({ where: { id } });
     if (!s) throw new NotFoundException("Server not found");
-    if (s.game !== Game.PALWORLD) throw new BadRequestException("Mod files are Palworld-only here");
+    if (s.game !== Game.PALWORLD && s.game !== Game.PALWORLD_WINE) {
+      throw new BadRequestException("Mod files are Palworld-only here");
+    }
     return s;
+  }
+  private isWine(s: { game: string }): boolean {
+    return s.game === Game.PALWORLD_WINE;
   }
   private paksDir(id: string): string {
     return join(LocalPaths.instanceRoot(id), "Pal/Content/Paks/~mods");
   }
-  private frameworkDir(id: string): string {
-    return join(LocalPaths.instanceRoot(id), "Pal/Binaries/Linux");
+  private frameworkDir(id: string, wine: boolean): string {
+    return join(LocalPaths.instanceRoot(id), wine ? "Pal/Binaries/Win64" : "Pal/Binaries/Linux");
   }
 
   async status(id: string) {
     const s = await this.palServer(id);
+    const wine = this.isWine(s);
     const cfg = JSON.parse(s.configJson) as ServerConfigValues;
-    const preload = (cfg.values?._palFrameworkPreload as string) || PAL_FRAMEWORK_DEFAULT_PRELOAD;
+    // Wine auto-loads the dwmapi.dll proxy from Win64; native preloads a configurable
+    // .so via LD_PRELOAD.
+    const preload = wine
+      ? PAL_FRAMEWORK_WINE_LOADER
+      : (cfg.values?._palFrameworkPreload as string) || PAL_FRAMEWORK_DEFAULT_PRELOAD;
     let paks: string[] = [];
     try {
       paks = (await readdir(this.paksDir(id))).filter((f) => /\.(pak|ucas|utoc)$/i.test(f));
@@ -74,7 +101,10 @@ export class PalModsService {
     } catch {
       /* framework lib not installed */
     }
-    return { paks, framework: { enabled: Boolean(cfg.values?._palFramework), preload, present } };
+    // Under Wine the proxy loads whenever it's present, so presence IS enabled; native
+    // gates loading behind the LD_PRELOAD flag written into the spec.
+    const enabled = wine ? present : Boolean(cfg.values?._palFramework);
+    return { paks, framework: { enabled, preload, present, wine } };
   }
 
   /** Add a .pak (or .ucas/.utoc, or a .zip of them) to the ~mods folder. */
@@ -114,10 +144,11 @@ export class PalModsService {
     return this.status(id);
   }
 
-  /** Install a framework archive (UE4SS Linux build) into Pal/Binaries/Linux. */
+  /** Install a framework archive (UE4SS) into the game's binaries dir — Pal/Binaries/Linux
+   *  for the native build, Pal/Binaries/Win64 for the Wine build. */
   async installFramework(id: string, data: Buffer) {
-    await this.palServer(id);
-    const dir = this.frameworkDir(id);
+    const s = await this.palServer(id);
+    const dir = this.frameworkDir(id, this.isWine(s));
     await mkdir(dir, { recursive: true });
     await this.extractZip(data, dir);
     await this.makeHeadlessSafe(dir);
@@ -152,30 +183,34 @@ export class PalModsService {
    * the default preload path), and enable the framework. Applies on next restart.
    */
   async installFrameworkFromUpstream(id: string) {
-    await this.palServer(id);
-    const data = await this.download(UE4SS_LINUX.url);
+    const s = await this.palServer(id);
+    const wine = this.isWine(s);
+    const asset = wine ? UE4SS_WINDOWS : UE4SS_LINUX;
+    const data = await this.download(asset.url);
 
     const digest = createHash("sha256").update(data).digest("hex");
-    if (digest !== UE4SS_LINUX.sha256) {
-      // The pinned asset changed under us — refuse rather than preload an unknown
-      // binary into the game process.
+    if (digest !== asset.sha256) {
+      // The pinned asset changed under us — refuse rather than load an unknown binary
+      // into the game process.
       throw new BadRequestException(
-        `UE4SS download failed integrity check (expected ${UE4SS_LINUX.sha256.slice(0, 12)}…, got ${digest.slice(0, 12)}…). Install it manually from ${UE4SS_LINUX.releasePage}.`,
+        `UE4SS download failed integrity check (expected ${asset.sha256.slice(0, 12)}…, got ${digest.slice(0, 12)}…). Install it manually from ${asset.releasePage}.`,
       );
     }
 
     await this.installFramework(id, data);
-    // The archive must actually contain the loader at the DEFAULT path (not whatever
-    // custom preload the server may have set), or enabling would start the server
-    // with a dangling LD_PRELOAD.
-    const loader = join(LocalPaths.instanceRoot(id), PAL_FRAMEWORK_DEFAULT_PRELOAD);
+    // The archive must actually contain the loader where the game expects it, or the
+    // server would start with a dangling loader.
+    const loaderRel = wine ? PAL_FRAMEWORK_WINE_LOADER : PAL_FRAMEWORK_DEFAULT_PRELOAD;
+    const loader = join(LocalPaths.instanceRoot(id), loaderRel);
     if (!(await stat(loader).then(() => true).catch(() => false))) {
       throw new BadRequestException(
-        `Extracted the archive but ${PAL_FRAMEWORK_DEFAULT_PRELOAD} is missing — the release layout may have changed.`,
+        `Extracted the archive but ${loaderRel} is missing — the release layout may have changed.`,
       );
     }
-    // Point the preload back at the default too: a stale custom path would silently
-    // win over the loader we just installed.
+    // Wine auto-loads the proxy DLL by presence — nothing to flag. Native must set the
+    // LD_PRELOAD flag + reset the preload to the default (a stale custom path would
+    // silently win over the loader we just installed).
+    if (wine) return this.status(id);
     return this.setFramework(id, { enabled: true, preload: PAL_FRAMEWORK_DEFAULT_PRELOAD });
   }
 
@@ -194,14 +229,7 @@ export class PalModsService {
   }
 
   private async extractZip(data: Buffer, dest: string) {
-    const tmp = join(tmpdir(), `palmod-upload-${process.pid}-${Date.now()}.zip`);
-    await writeFile(tmp, data);
-    try {
-      await execFileP("unzip", ["-o", tmp, "-d", dest]);
-    } catch (e) {
-      throw new BadRequestException(`Could not unzip the upload: ${(e as Error).message}`);
-    } finally {
-      await rm(tmp, { force: true }).catch(() => undefined);
-    }
+    // Untrusted upload / downloaded framework → traversal-safe extraction.
+    await extractZipSafe(data, dest);
   }
 }

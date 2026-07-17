@@ -8,6 +8,7 @@ export enum Game {
   CONAN = "CONAN",
   /** Palworld — native Linux, env-driven; RCON (no Workshop mods). */
   PALWORLD = "PALWORLD",
+  PALWORLD_WINE = "PALWORLD_WINE",
   /** Minecraft (Java) — itzg image, downloads the server jar itself; TCP, RCON. */
   MINECRAFT = "MINECRAFT",
   /** Icarus — mornedhels image (SteamCMD under Wine), env-driven; NO network RCON. */
@@ -44,6 +45,8 @@ export enum Game {
   RUST = "RUST",
   /** BeamNG.drive via BeamMP — rouhim image (native), env-driven; AuthKey required; NO RCON/query. */
   BEAMMP = "BEAMMP",
+  /** OpenTTD — ich777 image (downloads OpenTTD itself); we render openttd.cfg/private.cfg/secrets.cfg; NO Source RCON (in-game console). */
+  OPENTTD = "OPENTTD",
 }
 
 /** Friendly game names for the UI. */
@@ -52,6 +55,7 @@ export const GAME_LABELS: Record<Game, string> = {
   [Game.ASE]: "ARK: Survival Evolved",
   [Game.CONAN]: "Conan Exiles",
   [Game.PALWORLD]: "Palworld",
+  [Game.PALWORLD_WINE]: "Palworld (Wine — full mods)",
   [Game.MINECRAFT]: "Minecraft (Java)",
   [Game.ICARUS]: "Icarus",
   [Game.BEDROCK]: "Minecraft (Bedrock)",
@@ -70,6 +74,7 @@ export const GAME_LABELS: Record<Game, string> = {
   [Game.FACTORIO]: "Factorio",
   [Game.RUST]: "Rust",
   [Game.BEAMMP]: "BeamNG.drive (BeamMP)",
+  [Game.OPENTTD]: "OpenTTD",
 };
 
 /** SteamCMD app IDs for the dedicated server (anonymous login). */
@@ -78,6 +83,7 @@ export const STEAM_APP_ID: Record<Game, number> = {
   [Game.ASE]: 376030,
   [Game.CONAN]: 443030,
   [Game.PALWORLD]: 2394010,
+  [Game.PALWORLD_WINE]: 2394010,
   // Minecraft isn't on Steam — the itzg image downloads the server jar from
   // Mojang/its build sources. This is only read by the ASA-only game-file cache,
   // so the value is unused for Minecraft.
@@ -116,6 +122,41 @@ export const STEAM_APP_ID: Record<Game, number> = {
   [Game.RUST]: 258550,
   // BeamMP isn't on Steam — the rouhim image bundles the BeamMP server. Unused.
   [Game.BEAMMP]: 0,
+  [Game.OPENTTD]: 0, // OpenTTD isn't Steam-installed (downloaded from openttd.org)
+};
+
+/**
+ * The STORE (game) Steam app id, distinct from STEAM_APP_ID above which is the
+ * DEDICATED-SERVER app id used by SteamCMD. SteamGridDB indexes artwork under
+ * the game's store id, not the server id — e.g. ASA art lives on 2399830 (game),
+ * not 2430930 (server); Palworld on 1623730, not 2394010. 0 = not on Steam
+ * (Minecraft/Bedrock resolve art by name search instead).
+ */
+export const STORE_APP_ID: Record<Game, number> = {
+  [Game.ASA]: 2399830,
+  [Game.ASE]: 346110,
+  [Game.CONAN]: 440900,
+  [Game.PALWORLD]: 1623730,
+  [Game.PALWORLD_WINE]: 1623730,
+  [Game.MINECRAFT]: 0,
+  [Game.ICARUS]: 1149460,
+  [Game.BEDROCK]: 0,
+  [Game.VALHEIM]: 892970,
+  [Game.SEVEN_DAYS]: 251570,
+  [Game.ENSHROUDED]: 1203620,
+  [Game.ZOMBOID]: 108600,
+  [Game.VRISING]: 1604030,
+  [Game.SOTF]: 1326470,
+  [Game.SATISFACTORY]: 526870,
+  [Game.LIF]: 290080,
+  [Game.ATS]: 270880,
+  [Game.ETS2]: 227300,
+  [Game.CORE_KEEPER]: 1621690,
+  [Game.TERRARIA]: 105600,
+  [Game.FACTORIO]: 427520,
+  [Game.RUST]: 252490,
+  [Game.BEAMMP]: 284160,
+  [Game.OPENTTD]: 1536610, // Steam store page (for SteamGridDB artwork)
 };
 
 /** Steam Workshop "consumer" app ids for mod downloads (ARK: Survival Evolved /
@@ -142,6 +183,7 @@ export const GAME_ICONS: Record<Game, string> = {
   [Game.ASE]: "https://cdn.cloudflare.steamstatic.com/steam/apps/346110/header.jpg",
   [Game.CONAN]: "https://cdn.cloudflare.steamstatic.com/steam/apps/440900/header.jpg",
   [Game.PALWORLD]: "https://cdn.cloudflare.steamstatic.com/steam/apps/1623730/header.jpg",
+  [Game.PALWORLD_WINE]: "https://cdn.cloudflare.steamstatic.com/steam/apps/1623730/header.jpg",
   // Minecraft has no Steam page; use the Wikimedia logo thumbnail (cosmetic — a
   // 404 just falls back to Unraid's default container icon).
   [Game.MINECRAFT]:
@@ -165,6 +207,7 @@ export const GAME_ICONS: Record<Game, string> = {
   [Game.FACTORIO]: "https://cdn.cloudflare.steamstatic.com/steam/apps/427520/header.jpg",
   [Game.RUST]: "https://cdn.cloudflare.steamstatic.com/steam/apps/252490/header.jpg",
   [Game.BEAMMP]: "https://cdn.cloudflare.steamstatic.com/steam/apps/284160/header.jpg",
+  [Game.OPENTTD]: "https://cdn.cloudflare.steamstatic.com/steam/apps/1536610/header.jpg",
 };
 
 /** CurseForge numeric game id for ASA (used by the mod browser). */
@@ -195,6 +238,7 @@ export const RAM_ESTIMATE_MB: Record<Game, number> = {
   [Game.ASE]: 7000,
   [Game.CONAN]: 7000,
   [Game.PALWORLD]: 8000,
+  [Game.PALWORLD_WINE]: 10000,
   // Vanilla Java is light (~2-3 GB); modpacks run heavier. 4 GB is a safe headroom
   // estimate for the start guard — a server's own ramLimitMb overrides it.
   [Game.MINECRAFT]: 4000,
@@ -232,6 +276,42 @@ export const RAM_ESTIMATE_MB: Record<Game, number> = {
   [Game.RUST]: 8000,
   // The BeamMP server is a featherweight relay (physics run on clients) — well under 1 GB.
   [Game.BEAMMP]: 1000,
+  [Game.OPENTTD]: 1000, // OpenTTD is tiny (a few hundred MB even on a big map)
+};
+
+/**
+ * Approximate on-disk INSTALL footprint per game (MB), used by the start-time disk
+ * preflight to refuse a first boot that would fill the data volume and corrupt a
+ * half-downloaded install. Deliberately GENEROUS (real download + unpack + margin) —
+ * over-estimating only costs a rare, clearly-explained "free up disk" prompt, while
+ * under-estimating risks the corruption we're guarding against. Only consulted for a
+ * COLD start (nothing installed yet); a warm restart just needs the runtime floor.
+ */
+export const DISK_INSTALL_MB: Record<Game, number> = {
+  [Game.ASA]: 15000, // ~13 GB depot
+  [Game.ASE]: 12000,
+  [Game.CONAN]: 45000, // Conan's install is famously ~40 GB
+  [Game.PALWORLD]: 8000,
+  [Game.PALWORLD_WINE]: 12000, // Windows depot under Wine
+  [Game.MINECRAFT]: 3000, // vanilla is tiny; modpacks pull much more
+  [Game.ICARUS]: 15000,
+  [Game.BEDROCK]: 2000,
+  [Game.VALHEIM]: 3000,
+  [Game.SEVEN_DAYS]: 18000, // ~17 GB via LinuxGSM
+  [Game.ENSHROUDED]: 12000,
+  [Game.ZOMBOID]: 5000,
+  [Game.VRISING]: 6000,
+  [Game.SOTF]: 12000,
+  [Game.SATISFACTORY]: 15000,
+  [Game.LIF]: 8000,
+  [Game.ATS]: 10000, // base + the map DLC most servers run
+  [Game.ETS2]: 12000, // ETS2 base + map DLC is large
+  [Game.CORE_KEEPER]: 3000,
+  [Game.TERRARIA]: 2000,
+  [Game.FACTORIO]: 3000,
+  [Game.RUST]: 25000, // Rust's server files are ~20-25 GB
+  [Game.BEAMMP]: 3000,
+  [Game.OPENTTD]: 1000, // ~25 MB download + saves
 };
 
 /**
@@ -245,6 +325,7 @@ export const MAX_PLAYERS_BY_GAME: Record<Game, number> = {
   [Game.ASE]: 127,
   [Game.CONAN]: 40, // Conan Exiles server hard cap
   [Game.PALWORLD]: 32, // Palworld dedicated hard cap
+  [Game.PALWORLD_WINE]: 32,
   [Game.MINECRAFT]: 100, // no hard cap; a sane ceiling
   [Game.ICARUS]: 20, // was 8, RocketWerkz raised the ceiling to 20 slots
   [Game.BEDROCK]: 30,
@@ -263,6 +344,7 @@ export const MAX_PLAYERS_BY_GAME: Record<Game, number> = {
   [Game.FACTORIO]: 100, // no hard cap (0 = unlimited); a sane ceiling
   [Game.RUST]: 200, // no hard cap; a sane ceiling for self-hosting
   [Game.BEAMMP]: 64, // no hard cap; practical ceiling (physics load is client-side)
+  [Game.OPENTTD]: 255, // OpenTTD max_clients hard cap
 };
 
 /** The default player count the create form pre-fills per game (a sensible starting
@@ -272,6 +354,7 @@ export const DEFAULT_MAX_PLAYERS_BY_GAME: Record<Game, number> = {
   [Game.ASE]: 70,
   [Game.CONAN]: 40,
   [Game.PALWORLD]: 16,
+  [Game.PALWORLD_WINE]: 16,
   [Game.MINECRAFT]: 20,
   [Game.ICARUS]: 8,
   [Game.BEDROCK]: 10,
@@ -290,6 +373,7 @@ export const DEFAULT_MAX_PLAYERS_BY_GAME: Record<Game, number> = {
   [Game.FACTORIO]: 10,
   [Game.RUST]: 50,
   [Game.BEAMMP]: 10,
+  [Game.OPENTTD]: 25, // OpenTTD default max_clients
 };
 
 /** A password field on the create form: whether to show it at all, its label, an
@@ -314,6 +398,7 @@ export const ADMIN_PASSWORD_META: Record<Game, PasswordFieldMeta> = {
   [Game.ASE]: { show: true, label: "Admin password (enables RCON)" },
   [Game.CONAN]: { show: true, label: "Admin password (enables RCON)" },
   [Game.PALWORLD]: { show: true, label: "Admin password (enables RCON)" },
+  [Game.PALWORLD_WINE]: { show: true, label: "Admin password (enables RCON)" },
   [Game.MINECRAFT]: { show: true, label: "RCON password (enables the console)" },
   [Game.ICARUS]: { show: true, label: "Admin password (in-game /AdminLogin)" },
   [Game.BEDROCK]: { show: false, label: "" },
@@ -360,6 +445,11 @@ export const ADMIN_PASSWORD_META: Record<Game, PasswordFieldMeta> = {
     required: true,
     minLength: 10,
   },
+  [Game.OPENTTD]: {
+    show: true,
+    label: "Admin console password (rcon)",
+    help: "Sets rcon_password — lets an admin run server commands from the in-game multiplayer console.",
+  },
 };
 
 /** The join (server) password field, per game. Every game can have one, but Valheim
@@ -369,6 +459,7 @@ export const JOIN_PASSWORD_META: Record<Game, PasswordFieldMeta> = {
   [Game.ASE]: { show: true, label: "Server password (players need it to join)" },
   [Game.CONAN]: { show: true, label: "Server password (players need it to join)" },
   [Game.PALWORLD]: { show: true, label: "Server password (players need it to join)" },
+  [Game.PALWORLD_WINE]: { show: true, label: "Server password (players need it to join)" },
   [Game.MINECRAFT]: { show: true, label: "Server password (players need it to join)" },
   [Game.ICARUS]: { show: true, label: "Server password (players need it to join)" },
   [Game.BEDROCK]: { show: true, label: "Server password (players need it to join)" },
@@ -411,6 +502,7 @@ export const JOIN_PASSWORD_META: Record<Game, PasswordFieldMeta> = {
   [Game.RUST]: { show: false, label: "" },
   // The rouhim image doesn't expose BeamMP's join password; keep the server Private instead.
   [Game.BEAMMP]: { show: false, label: "" },
+  [Game.OPENTTD]: { show: true, label: "Server password (players need it to join)" },
 };
 
 /** Default port offsets within a per-server allocation block. */
@@ -552,6 +644,10 @@ export const BEAMMP_OFFICIAL_MAPS = [
   "derby",
 ] as const;
 
+/** OpenTTD has no named maps — the world is generated. We repurpose the map field as the
+ *  LANDSCAPE (climate), written to openttd.cfg [game_creation] landscape. */
+export const OPENTTD_OFFICIAL_MAPS = ["temperate", "arctic", "tropic", "toyland"] as const;
+
 /** Friendly display names for known level names (raw level → label). */
 export const MAP_LABELS: Record<string, string> = {
   // Conan Exiles
@@ -673,6 +769,7 @@ export const MAPS_BY_GAME: Record<Game, readonly string[]> = {
   [Game.ASE]: ASE_OFFICIAL_MAPS,
   [Game.CONAN]: CONAN_OFFICIAL_MAPS,
   [Game.PALWORLD]: PALWORLD_OFFICIAL_MAPS,
+  [Game.PALWORLD_WINE]: PALWORLD_OFFICIAL_MAPS,
   [Game.MINECRAFT]: MINECRAFT_OFFICIAL_MAPS,
   [Game.ICARUS]: ICARUS_OFFICIAL_MAPS,
   [Game.BEDROCK]: BEDROCK_OFFICIAL_MAPS,
@@ -691,4 +788,5 @@ export const MAPS_BY_GAME: Record<Game, readonly string[]> = {
   [Game.FACTORIO]: FACTORIO_OFFICIAL_MAPS,
   [Game.RUST]: RUST_OFFICIAL_MAPS,
   [Game.BEAMMP]: BEAMMP_OFFICIAL_MAPS,
+  [Game.OPENTTD]: OPENTTD_OFFICIAL_MAPS,
 };

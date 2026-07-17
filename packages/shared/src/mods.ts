@@ -59,3 +59,28 @@ export interface MinecraftModpack {
   latestFileName?: string | null;
   updateAvailable?: boolean;
 }
+
+/** One installed mod's update state, unified across sources (Thunderstore package or
+ *  CurseForge modpack). `id` is what the apply path needs to update just this one. */
+export interface ModUpdateItem {
+  id: string; // Thunderstore "Owner-Mod" full name, or the modpack slug
+  name: string;
+  installedVersion: string | null;
+  latestVersion: string | null;
+}
+
+/** Whether a server has mod updates, and which mods. `supported` is false for games
+ *  whose mods auto-update on restart or have no remote version to compare. */
+export interface ModUpdateStatus {
+  supported: boolean;
+  count: number; // number of mods with an update available
+  items: ModUpdateItem[]; // only the out-of-date ones
+}
+
+/** Result of applying pending mod updates for a server. */
+export interface ModUpdateResult {
+  updated: string[]; // names updated
+  failed: { name: string; error: string }[];
+  /** True if the server was running — the caller should restart to load the changes. */
+  restartNeeded: boolean;
+}

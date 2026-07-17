@@ -17,6 +17,7 @@ const QUICK_COMMANDS: Partial<Record<Game, string[]>> = {
   [Game.ASE]: ["ListPlayers", "SaveWorld", "Broadcast ", "DestroyWildDinos", "GetGameLog"],
   [Game.CONAN]: ["listplayers", "broadcast ", "listallbuildings"],
   [Game.PALWORLD]: ["ShowPlayers", "Info", "Save", "Broadcast "],
+  [Game.PALWORLD_WINE]: ["ShowPlayers", "Info", "Save", "Broadcast "],
   [Game.MINECRAFT]: ["list", "say ", "time set day", "weather clear", "whitelist list", "difficulty "],
   [Game.SEVEN_DAYS]: ["listplayers", "gettime", "settime day", "saveworld", "say "],
   [Game.ZOMBOID]: ["players", 'servermsg "', "save", "showoptions", "checkModsNeedUpdate"],

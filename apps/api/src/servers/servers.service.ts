@@ -7,7 +7,7 @@ import {
   type OnApplicationBootstrap,
 } from "@nestjs/common";
 import type Docker from "dockerode";
-import { mkdir, writeFile, rm, cp, chmod, chown, stat, readFile } from "node:fs/promises";
+import { mkdir, writeFile, rm, cp, chmod, chown, stat, readFile, readdir } from "node:fs/promises";
 import { execFile, spawn } from "node:child_process";
 import type { Readable } from "node:stream";
 import { join, dirname, relative, sep } from "node:path";
@@ -19,6 +19,8 @@ import {
   RealtimeTopic,
   DEFAULT_PORTS,
   RAM_ESTIMATE_MB,
+  DISK_INSTALL_MB,
+  GAME_LABELS,
   type RunningServerRam,
   type InsufficientRamInfo,
   type CreateServerDto,
@@ -28,6 +30,7 @@ import {
   type ServerStatsById,
   type ServerStatsDetail,
   type ServerConfigValues,
+  type GameArtwork,
 } from "@ark/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { CryptoService } from "../crypto/crypto.service";
@@ -36,6 +39,7 @@ import { RealtimeGateway } from "../realtime/realtime.gateway";
 import { DockerService } from "../docker/docker.service";
 import { CatalogService } from "../catalog/catalog.service";
 import { ServerConfigWriter } from "./config-writer.service";
+import { ArtworkService } from "../artwork/artwork.service";
 import { InstallerService } from "../installer/installer.service";
 import { RconService } from "../rcon/rcon.service";
 import { StateMachineService } from "./state-machine.service";
@@ -101,6 +105,12 @@ export const READY_RE_BY_GAME: Record<Game, RegExp> = {
   [Game.ASE]: /(advertising for join(?!')|server is up)/i,
   [Game.CONAN]: /Startup report\. StartupTime=/i,
   [Game.PALWORLD]: /Running Palworld dedicated server/i,
+  // The ripps818 wine image emits NO positive readiness line (it detects the server via
+  // its REST/RCON poll, not a log line). Its server-manager prints ">>> Starting the
+  // gameserver" right before launching PalServer.exe — the only deterministic marker.
+  // The RCON/player polls retry until the server (a couple minutes later under Wine)
+  // actually binds, so a slightly-early flip to Running is fine.
+  [Game.PALWORLD_WINE]: /Starting the gameserver/i,
   [Game.MINECRAFT]: /Done \([\d.]+s\)! For help/i,
   [Game.ICARUS]: /Match State Changed from EnteringMap to WaitingToStart|SteamNetDriver_\w+ bound to port/i,
   // Bedrock's dedicated server prints "Server started." once it's up (no RCON to
@@ -159,6 +169,7 @@ export const READY_RE_BY_GAME: Record<Game, RegExp> = {
   // BeamMP prints an unmistakable all-caps line once fully up. PROVISIONAL —
   // confirm against a real boot.
   [Game.BEAMMP]: /ALL SYSTEMS STARTED SUCCESSFULLY|Vehicle data network online/i,
+  [Game.OPENTTD]: /Starting dedicated server/i,
 };
 
 /** The "server is now joinable" log-marker regex for a game. */
@@ -168,11 +179,39 @@ export function readyReFor(game: Game): RegExp {
 const CRASH_WINDOW_MS = 5 * 60_000;
 const CRASH_LIMIT = 3;
 
+/**
+ * How long a server may sit in Starting before we treat the start as failed. A
+ * server that never reaches its ready marker — a wrong/renamed marker, a boot that
+ * hangs, a download that dies mid-stream — would otherwise stay in Starting FOREVER,
+ * silently holding the one-at-a-time slot (RAM + ports) so nothing else can run.
+ *
+ * It's an ABSOLUTE cap on time-in-Starting, not a log-stall detector: the failure we
+ * most want to catch (a healthy server whose marker never matches) keeps logging
+ * indefinitely, so "no new logs" would never fire. Sized for the worst case — a cold
+ * first boot that downloads the whole game — so a legitimately slow start is never
+ * killed; the big-download games get a longer window.
+ */
+const STARTUP_DEADLINE_MS_DEFAULT = 30 * 60_000;
+const STARTUP_DEADLINE_MS_BY_GAME: Partial<Record<Game, number>> = {
+  [Game.ASA]: 45 * 60_000, // ~13 GB depot on first boot
+  [Game.ASE]: 45 * 60_000,
+  [Game.SEVEN_DAYS]: 45 * 60_000, // ~17 GB via LinuxGSM
+};
+const startupDeadlineMs = (game: Game): number =>
+  STARTUP_DEADLINE_MS_BY_GAME[game] ?? STARTUP_DEADLINE_MS_DEFAULT;
+
+/** Free-disk headroom (MB) every start needs beyond the install footprint — room for
+ *  the world save, logs, and a backup snapshot so a running server can't wedge the box. */
+const DISK_RUNTIME_FLOOR_MB = 2048;
+
 @Injectable()
 export class ServersService implements OnApplicationBootstrap {
   private readonly logger = new Logger(ServersService.name);
   private readonly logStops = new Map<string, () => void>();
   private readonly crashTimes = new Map<string, number[]>();
+  /** Armed while a server is in Starting; fires if it never reaches Running in time.
+   *  Cleared on ready / stop / crash so it only ever fires for a genuinely stuck boot. */
+  private readonly startTimers = new Map<string, NodeJS.Timeout>();
   /** Serializes lifecycle ops per server (no double-start / start-while-update). */
   private readonly locks = new Map<string, Promise<unknown>>();
   /**
@@ -204,6 +243,7 @@ export class ServersService implements OnApplicationBootstrap {
     private readonly backups: BackupsService,
     private readonly players: PlayersService,
     private readonly configWriter: ServerConfigWriter,
+    private readonly artwork: ArtworkService,
   ) {}
 
   /** The captured log / console for the current run (survives refresh + tab
@@ -311,6 +351,9 @@ export class ServersService implements OnApplicationBootstrap {
       await this.sm.force(serverId, target, "adopted running container on restart");
     }
     await this.attachMonitors(serverId, containerId);
+    // A container re-adopted still mid-boot gets a fresh deadline so a start that was
+    // already wedged when the manager restarted can't sit in Starting indefinitely.
+    if (target === ServerState.Starting) this.armStartDeadline(serverId, game);
   }
 
   // ── Locking ────────────────────────────────────────────────────────────────
@@ -481,6 +524,7 @@ export class ServersService implements OnApplicationBootstrap {
           modIds: JSON.stringify(dto.modIds ?? []),
           ramLimitMb: dto.ramLimitMb ?? null,
           cpuLimit: dto.cpuLimit ?? null,
+          imageTag: dto.imageTag && dto.imageTag.trim() ? dto.imageTag.trim() : null,
         },
         include: { cluster: true },
       });
@@ -541,6 +585,15 @@ export class ServersService implements OnApplicationBootstrap {
     if (dto.maxPlayers !== undefined && dto.maxPlayers !== existing.maxPlayers) {
       data.maxPlayers = dto.maxPlayers;
       launchChanged = true;
+    }
+    // Advanced: pin/unpin the game image tag. Applied on the next start (pull +
+    // recreate), so it counts as a launch change → prompts a Restart when running.
+    if (dto.imageTag !== undefined) {
+      const tag = dto.imageTag && dto.imageTag.trim() ? dto.imageTag.trim() : null;
+      if (tag !== existing.imageTag) {
+        data.imageTag = tag;
+        launchChanged = true;
+      }
     }
     // Ports: editable only while the server is down (they're baked into the container
     // port bindings + rendered configs). Changing the game port also moves its
@@ -791,6 +844,10 @@ export class ServersService implements OnApplicationBootstrap {
     } else if (!opts.force) {
       await this.assertRamAvailable(id);
     }
+    // Disk applies to every real start (including a swap's target and an auto-restart)
+    // but not a restart-in-place, which re-uses files already on disk. A near-full
+    // volume corrupts a fresh install and starves a running server's saves.
+    if (!opts.force) await this.assertDiskAvailable(id);
     return this.withLock(id, () => this.doStart(id));
   }
 
@@ -880,6 +937,43 @@ export class ServersService implements OnApplicationBootstrap {
   }
 
   /**
+   * Throw a 409 if the data volume doesn't have room to safely start this server. A
+   * COLD start (nothing installed yet) needs the game's whole install footprint plus a
+   * runtime floor — starting onto a near-full disk corrupts a half-downloaded install;
+   * a warm restart just needs the floor for saves/logs. Fails fast with a clear "free
+   * up disk" message instead of letting a container die mid-write.
+   */
+  private async assertDiskAvailable(id: string): Promise<void> {
+    const server = await this.prisma.server.findUnique({ where: { id } });
+    if (!server) throw new NotFoundException("Server not found");
+    const game = server.game as Game;
+    const cold = await this.isColdInstall(id);
+    const needMb = DISK_RUNTIME_FLOOR_MB + (cold ? DISK_INSTALL_MB[game] : 0);
+    const freeMb = await this.sampleFreeDiskMb();
+    if (freeMb >= needMb) return;
+    const gb = (mb: number) => (mb / 1024).toFixed(1);
+    throw new ConflictException(
+      `Not enough disk to ${cold ? "install" : "start"} ${GAME_LABELS[game]}: ` +
+        `need ~${gb(needMb)} GB free, only ${gb(freeMb)} GB available. Free up space and try again.`,
+    );
+  }
+
+  /** Free space (MB) on the data volume. Split out so tests can stub it. */
+  private async sampleFreeDiskMb(): Promise<number> {
+    return (await hostStats(loadEnv().DATA_DIR)).diskFreeMb;
+  }
+
+  /** True when this server's game files aren't on disk yet (fresh instance dir) — so
+   *  the next start will download the whole game. Missing dir counts as cold. */
+  private async isColdInstall(id: string): Promise<boolean> {
+    try {
+      return (await readdir(LocalPaths.instanceRoot(id))).length === 0;
+    } catch {
+      return true;
+    }
+  }
+
+  /**
    * Throw a 409 if any of this server's host ports are already bound by another
    * live server (Running/Starting/Stopping — its ports are still held until the
    * teardown finishes). Compares full port sets, so it catches same-game servers
@@ -939,6 +1033,11 @@ export class ServersService implements OnApplicationBootstrap {
       });
     }
 
+    // Unraid dashboard icon: per-server pick, else the game's SGDB default.
+    const override = server.artworkJson ? (JSON.parse(server.artworkJson) as GameArtwork) : null;
+    const gameArt = (await this.artwork.getAll().catch(() => ({}) as Partial<Record<Game, GameArtwork>>))[game];
+    const iconUrl = override?.icon ?? gameArt?.icon ?? null;
+
     return buildContainerSpec({
       serverId: server.id,
       game,
@@ -966,6 +1065,8 @@ export class ServersService implements OnApplicationBootstrap {
       curseForgeApiKey:
         game === Game.MINECRAFT ? await this.settings.get(SettingKeys.CurseForgeApiKey) : null,
       pzModNames,
+      iconUrl,
+      imageTag: server.imageTag,
     });
   }
 
@@ -987,6 +1088,8 @@ export class ServersService implements OnApplicationBootstrap {
     await this.assertPortsFree(server);
 
     await this.sm.transition(id, ServerState.Starting);
+    // Fresh attempt → drop any stale crash reason from a previous failed boot.
+    await this.prisma.server.update({ where: { id }, data: { crashReason: null } }).catch(() => undefined);
     try {
       const game = server.game as Game;
       // Clone game files from the warmed cache if available, so POK boots
@@ -1030,16 +1133,37 @@ export class ServersService implements OnApplicationBootstrap {
       this.logCapture.clear(id);
       // Remove any stale container with the same name, then create+start.
       await this.docker.removeByServerId(id).catch(() => undefined);
-      await this.docker.pullImage(spec.Image as string).catch((e) =>
-        this.logger.warn(`pull skipped: ${(e as Error).message}`),
-      );
+      let pullError: string | null = null;
+      await this.docker
+        .pullImage(spec.Image as string)
+        .catch((e) => {
+          pullError = (e as Error).message;
+          this.logger.warn(`pull skipped: ${pullError}`);
+        });
+      // A pull can fail transiently (registry hiccup) and still be fine if the image is
+      // already cached — but if it's NOT on disk either, createContainer would throw a
+      // cryptic "No such image". Fail fast with a clear, actionable reason instead.
+      if (!(await this.docker.imageExists(spec.Image as string))) {
+        throw new Error(
+          `game image ${spec.Image} isn't available` +
+            (pullError ? ` (pull failed: ${pullError})` : "") +
+            " — check the image name and your network/registry access.",
+        );
+      }
       const containerId = await this.docker.createContainer(spec);
       // Container now reflects the current config → clear the restart-needed flag.
       await this.prisma.server.update({ where: { id }, data: { containerId, configDirty: false } });
       await this.docker.start(containerId);
 
       await this.attachMonitors(id, containerId);
+      // Bound time-in-Starting so a boot that never signals ready can't hold the slot.
+      this.armStartDeadline(id, game);
     } catch (err) {
+      // The launch itself failed (bad image, config/preflight error) — the thrown
+      // message IS the reason; surface it in the UI alongside the Crashed state.
+      await this.prisma.server
+        .update({ where: { id }, data: { crashReason: `Start failed: ${(err as Error).message}` } })
+        .catch(() => undefined);
       await this.sm.transition(id, ServerState.Crashed, { error: (err as Error).message });
       throw new BadRequestException(`Start failed: ${(err as Error).message}`);
     }
@@ -1093,6 +1217,7 @@ export class ServersService implements OnApplicationBootstrap {
    */
   private async tearDownStopped(id: string, containerId: string | null): Promise<void> {
     this.stopping.add(id); // suppress the crash watchdog for this deliberate exit
+    this.disarmStartDeadline(id); // stopping during boot cancels the startup failsafe
     try {
       await this.saveAndWaitForSave(id, containerId);
       await this.rcon.disconnect(id).catch(() => undefined);
@@ -1271,6 +1396,7 @@ export class ServersService implements OnApplicationBootstrap {
   private async onReady(id: string): Promise<void> {
     const state = await this.sm.current(id).catch(() => null);
     if (state !== ServerState.Starting) return; // already Running → fires once
+    this.disarmStartDeadline(id); // reached ready in time — cancel the failsafe
     await this.sm.transition(id, ServerState.Running);
     // First successful install seeds the golden cache for future servers.
     const server = await this.prisma.server.findUnique({ where: { id } });
@@ -1287,6 +1413,14 @@ export class ServersService implements OnApplicationBootstrap {
     const state = await this.sm.current(id).catch(() => null);
     // Expected stop → ignore; we already drive Stopping/Stopped explicitly.
     if (!state || ![ServerState.Running, ServerState.Starting].includes(state)) return;
+
+    // It exited on its own → the startup failsafe is moot; the crash path owns it now.
+    this.disarmStartDeadline(id);
+
+    // Capture WHY the container died (exit code + log tail) so the UI can show it
+    // instead of a bare "Crashed" — invaluable when a pinned/bad image won't boot.
+    const server = await this.prisma.server.findUnique({ where: { id } });
+    if (server?.containerId) await this.recordCrashReason(id, server.containerId);
 
     const now = Date.now();
     const recent = (this.crashTimes.get(id) ?? []).filter((t) => now - t < CRASH_WINDOW_MS);
@@ -1310,6 +1444,104 @@ export class ServersService implements OnApplicationBootstrap {
     await this.start(id).catch((e) =>
       this.logger.error(`auto-restart failed: ${(e as Error).message}`),
     );
+  }
+
+  /**
+   * Persist a human-readable reason a container died: its exit code (or OOM) plus
+   * the tail of its own logs. Best-effort — a failure here never blocks the crash
+   * path. Cleared to null on the next clean start.
+   */
+  private async recordCrashReason(id: string, containerId: string): Promise<void> {
+    try {
+      const reason = await this.buildCrashReason(containerId);
+      if (reason) await this.prisma.server.update({ where: { id }, data: { crashReason: reason } });
+    } catch (e) {
+      this.logger.warn(`crash-reason capture failed for ${id}: ${(e as Error).message}`);
+    }
+  }
+
+  /** Inspect a dead container + tail its logs into a compact reason string. */
+  private async buildCrashReason(containerId: string): Promise<string | null> {
+    const info = await this.docker.inspect(containerId).catch(() => null);
+    const oom = info?.State?.OOMKilled;
+    const code = info?.State?.ExitCode;
+    const header = oom
+      ? "The container ran out of memory and was killed (OOM)."
+      : `The container exited with code ${code ?? "?"}.`;
+    const raw = await this.docker.tailLogs(containerId, 40).catch(() => "");
+    const tail = raw
+      .split("\n")
+      .map((l) => l.replace(/\s+$/, ""))
+      .filter((l) => l.trim().length > 0)
+      .slice(-16)
+      .join("\n")
+      .slice(-1800); // keep the DB column + payload small
+    return tail ? `${header}\n\n${tail}` : header;
+  }
+
+  // ── Startup deadline ─────────────────────────────────────────────────────────
+  /** Start the clock on a Starting server: if it hasn't reached Running by its
+   *  per-game deadline, {@link onStartDeadline} tears it down and frees the slot. */
+  private armStartDeadline(id: string, game: Game): void {
+    this.disarmStartDeadline(id);
+    const ms = startupDeadlineMs(game);
+    const timer = setTimeout(() => void this.onStartDeadline(id, ms), ms);
+    // Don't let a pending deadline keep the process alive (e.g. tests, shutdown).
+    timer.unref?.();
+    this.startTimers.set(id, timer);
+  }
+
+  private disarmStartDeadline(id: string): void {
+    const timer = this.startTimers.get(id);
+    if (timer) clearTimeout(timer);
+    this.startTimers.delete(id);
+  }
+
+  /** The start took too long. If it's still Starting (never reached its marker),
+   *  fail it: tear the container down so the slot is freed and tell the user — a
+   *  wedged boot must never hold the box hostage. Deliberately does NOT auto-restart
+   *  (unlike a crash): a start that hangs once will almost certainly hang again, and
+   *  looping 30-minute timeouts would just keep the slot occupied. */
+  private async onStartDeadline(id: string, ms: number): Promise<void> {
+    this.startTimers.delete(id);
+    const state = await this.sm.current(id).catch(() => null);
+    if (state !== ServerState.Starting) return; // reached Running, or already torn down
+    const mins = Math.round(ms / 60_000);
+    this.logger.warn(`start(${id}): no ready marker within ${mins}m — treating the start as failed`);
+    await this.events.emit({
+      type: EventType.Warning,
+      message: `Server never became ready within ${mins} min — stopping it. Check the log (its readiness marker may not be matching).`,
+      serverId: id,
+    });
+    await this.failStuckStart(id);
+  }
+
+  /** Tear down a server wedged in Starting and settle it to Crashed. Like a stop but
+   *  with no graceful save (a boot that never finished has nothing to persist) and no
+   *  transition to Stopped — Crashed reflects that the start did not succeed. */
+  private async failStuckStart(id: string): Promise<void> {
+    this.stopping.add(id); // our own teardown exit isn't a crash — suppress the watchdog
+    try {
+      this.disarmStartDeadline(id);
+      this.logStops.get(id)?.();
+      this.logStops.delete(id);
+      await this.rcon.disconnect(id).catch(() => undefined);
+      // Capture the reason (log tail) BEFORE removing the container — a stuck start's
+      // log is often the only clue the readiness marker never matched.
+      const stuck = await this.prisma.server.findUnique({ where: { id } });
+      if (stuck?.containerId) await this.recordCrashReason(id, stuck.containerId);
+      await this.docker
+        .removeByServerId(id)
+        .catch((e) => this.logger.warn(`failStuckStart(${id}): force-remove failed: ${(e as Error).message}`));
+      await this.prisma.server
+        .update({ where: { id }, data: { containerId: null } })
+        .catch(() => undefined);
+      await this.sm.transition(id, ServerState.Crashed).catch(() => undefined);
+    } finally {
+      this.stopping.delete(id);
+      // Mirror tearDownStopped: the freed RAM lags in /proc, so the RAM guard debounces.
+      this.lastStopCompletedAt = Date.now();
+    }
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────────---
@@ -1360,6 +1592,9 @@ export class ServersService implements OnApplicationBootstrap {
       ports: this.portsOf(row) ?? DEFAULT_PORTS,
       installedBuildId: row.installedBuildId,
       updateAvailable: row.updateAvailable,
+      modUpdateAvailable: row.modUpdateAvailable,
+      imageTag: row.imageTag,
+      crashReason: row.state === ServerState.Crashed ? row.crashReason : null,
       imageReady,
       configDirty: row.configDirty,
       joinPassword,
@@ -1370,8 +1605,30 @@ export class ServersService implements OnApplicationBootstrap {
       modIds: JSON.parse(row.modIds) as number[],
       ramLimitMb: row.ramLimitMb,
       cpuLimit: row.cpuLimit,
+      artwork: row.artworkJson ? (JSON.parse(row.artworkJson) as GameArtwork) : null,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };
+  }
+
+  /** Merge a per-server artwork override (each kind: a URL to pin, or null to
+   *  clear back to the game default). Returns the updated summary. */
+  async setArtwork(id: string, patch: Partial<GameArtwork>): Promise<ServerSummary> {
+    const server = await this.prisma.server.findUnique({ where: { id } });
+    if (!server) throw new NotFoundException("Server not found");
+    const current = (server.artworkJson ? JSON.parse(server.artworkJson) : {}) as Partial<GameArtwork>;
+    // Only keys PRESENT in the request may change: the validated DTO instance
+    // materializes every declared field, so absent kinds arrive as own
+    // `undefined` properties — a naive spread would clobber previously-pinned
+    // kinds with undefined (picking a banner used to wipe the cover).
+    const sent = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined));
+    const merged = { ...current, ...sent };
+    // Drop null/empty keys so an all-default override stores as NULL, not "{}".
+    const clean = Object.fromEntries(Object.entries(merged).filter(([, v]) => v));
+    const updated = await this.prisma.server.update({
+      where: { id },
+      data: { artworkJson: Object.keys(clean).length ? JSON.stringify(clean) : null },
+    });
+    return this.toSummary(updated as ServerRow, await this.docker.imageExists(IMAGES[server.game as Game]).catch(() => false));
   }
 }

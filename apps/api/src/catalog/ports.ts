@@ -163,6 +163,11 @@ export const RUST_PORTS: PortSet = { game: 28015, rawSocket: 28082, query: 28016
  * hidden); query mirrors the game port, rawSocket unused.
  */
 export const BEAMMP_PORTS: PortSet = { game: 30814, rawSocket: 30815, query: 30814, rcon: 0 };
+// OpenTTD: game 3979 (TCP+UDP; the UDP side also answers server-browser queries). The
+// admin protocol port (3977) stays LAN-only; no Source RCON.
+export const OPENTTD_PORTS: PortSet = { game: 3979, rawSocket: 3980, query: 3979, rcon: 0 };
+// Wine Palworld: shifted off native Palworld's default block so both can be installed.
+export const PALWORLD_WINE_PORTS: PortSet = { game: 8311, rawSocket: 8312, query: 8313, rcon: 8314 };
 
 /**
  * Every host port a server binds (skipping unused 0 slots — e.g. rcon on no-RCON
@@ -219,6 +224,7 @@ export function forwardSpec(game: Game, ports: PortSet): ForwardPort[] {
         { port: ports.query, proto: "udp", label: "query (server browser)" },
       ];
     case Game.PALWORLD:
+    case Game.PALWORLD_WINE:
       return [{ port: ports.game, proto: "udp", label: "game" }];
     case Game.ZOMBOID:
       return [
@@ -276,6 +282,11 @@ export function forwardSpec(game: Game, ports: PortSet): ForwardPort[] {
         { port: ports.game, proto: "tcp", label: "game (tcp)" },
         { port: ports.game, proto: "udp", label: "game (udp)" },
       ];
+    case Game.OPENTTD:
+      return [
+        { port: ports.game, proto: "tcp", label: "game (tcp)" },
+        { port: ports.game, proto: "udp", label: "game (udp)" },
+      ];
     default:
       // ARK family + Conan: game + raw socket + query, all UDP.
       return [
@@ -306,5 +317,7 @@ export function portsFor(game: Game): PortSet {
   if (game === Game.FACTORIO) return FACTORIO_PORTS;
   if (game === Game.RUST) return RUST_PORTS;
   if (game === Game.BEAMMP) return BEAMMP_PORTS;
+  if (game === Game.PALWORLD_WINE) return PALWORLD_WINE_PORTS;
+  if (game === Game.OPENTTD) return OPENTTD_PORTS;
   return FIXED_PORTS;
 }

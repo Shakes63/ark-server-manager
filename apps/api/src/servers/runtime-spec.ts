@@ -14,6 +14,7 @@ import { ENSHROUDED_MINUTE_NS_KEYS } from "../catalog/enshrouded.catalog";
 import { HostPaths, ContainerPaths } from "../common/paths";
 import {
   IMAGES,
+  imageRefFor,
   POK_DATA_DIR,
   HERMSI_VOLUME,
   CONAN_DATA_DIR,
@@ -43,6 +44,7 @@ import {
   RUST_DATA_DIR,
   BEAMMP_CLIENT_MODS_DIR,
   BEAMMP_SERVER_MODS_DIR,
+  OPENTTD_DATA_DIR,
 } from "../common/images";
 // (ATS reuses the ich777 wrapper mount points LIF_STEAMCMD_DIR / LIF_SERVERFILES_DIR.)
 import { ZOMBOID_STEAM_PORTS } from "../catalog/ports";
@@ -75,12 +77,55 @@ export interface RuntimeSpecInput {
   curseForgeApiKey?: string | null;
   /** Zomboid only: the in-game "Mod ID" names (Mods=) matching modIds (WorkshopItems=). */
   pzModNames?: string[];
+  /** Square icon for the Unraid Docker dashboard (per-server pick or SGDB game
+   *  default); falls back to the game's Steam header when absent. */
+  iconUrl?: string | null;
+  /** Advanced: pin the game image to a specific tag (e.g. a prior version) instead of
+   *  the shipped default. Invalid/blank falls back to the default tag. */
+  imageTag?: string | null;
 }
 
 /** Build the Docker create spec for a game-server container. */
 export function buildContainerSpec(input: RuntimeSpecInput): Docker.ContainerCreateOptions {
-  return hardenSpec(gameSpecFor(input));
+  const spec = hardenSpec(gameSpecFor(input), input.game);
+  // Each game spec sets Image to its shipped default; apply a pinned tag here (one
+  // choke point) so an advanced user can run a specific version.
+  spec.Image = imageRefFor(input.game, input.imageTag);
+  return spec;
 }
+
+/**
+ * Sanitize a user-chosen game version/branch (from the settings dropdown) into a safe
+ * token, falling back to the shipped default when unset or malformed. Accepts version
+ * ids and branch names — "1.20.4", "26.3-snapshot-3", "15.3", "16.0-beta1", "latest",
+ * "stable", "latest_experimental", "LATEST". The value reaches a Docker env array (not
+ * a shell), but constraining the shape keeps a junk value out of the image's launch
+ * scripts and preserves the default's behaviour for existing servers.
+ */
+export function gameVersionValue(raw: unknown, fallback: string): string {
+  const v = typeof raw === "string" ? raw.trim() : "";
+  return v && /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(v) ? v : fallback;
+}
+
+/**
+ * ich777 GAME_ID with an optional Steam beta branch. The wrapper installs the default
+ * "public" branch from "<appid>", or a specific version/beta from "<appid> -beta <branch>"
+ * (per the image docs). Used by the truck sims + LiF, whose game version is a Steam branch.
+ */
+export function ich777GameId(appId: number, branch: unknown): string {
+  const b = gameVersionValue(branch, "public");
+  return b && b !== "public" ? `${appId} -beta ${b}` : `${appId}`;
+}
+
+/**
+ * The POK images (ASA + Conan, both Acekorneya) run `sudo` in their entrypoints,
+ * and sudo refuses to run under no-new-privileges EVEN AS ROOT (it checks the
+ * flag explicitly) — the container dies before printing a line. gosu/su-based
+ * images are unaffected (dropping FROM root needs no escalation), so only these
+ * two are exempt. Found live: Conan crash-looped with
+ * "sudo: The 'no new privileges' flag is set". They still get the PidsLimit.
+ */
+const NO_NEW_PRIVS_EXEMPT = new Set<Game>([Game.ASA, Game.CONAN]);
 
 /**
  * Defense-in-depth applied to every game container: no-new-privileges blocks
@@ -90,9 +135,11 @@ export function buildContainerSpec(input: RuntimeSpecInput): Docker.ContainerCre
  * 8192 is far above real usage, but UE5-under-Proton servers run 1-2k threads
  * and threads count against the limit — hence not lower.
  */
-function hardenSpec(spec: Docker.ContainerCreateOptions): Docker.ContainerCreateOptions {
+function hardenSpec(spec: Docker.ContainerCreateOptions, game: Game): Docker.ContainerCreateOptions {
   const host = (spec.HostConfig ??= {});
-  host.SecurityOpt = [...(host.SecurityOpt ?? []), "no-new-privileges:true"];
+  if (!NO_NEW_PRIVS_EXEMPT.has(game)) {
+    host.SecurityOpt = [...(host.SecurityOpt ?? []), "no-new-privileges:true"];
+  }
   host.PidsLimit ??= 8192;
   return spec;
 }
@@ -101,6 +148,7 @@ function gameSpecFor(input: RuntimeSpecInput): Docker.ContainerCreateOptions {
   if (input.game === Game.ASA) return buildPokSpec(input);
   if (input.game === Game.CONAN) return buildConanSpec(input);
   if (input.game === Game.PALWORLD) return buildPalworldSpec(input);
+  if (input.game === Game.PALWORLD_WINE) return buildPalworldWineSpec(input);
   if (input.game === Game.MINECRAFT) return buildMinecraftSpec(input);
   if (input.game === Game.ICARUS) return buildIcarusSpec(input);
   if (input.game === Game.BEDROCK) return buildBedrockSpec(input);
@@ -118,6 +166,7 @@ function gameSpecFor(input: RuntimeSpecInput): Docker.ContainerCreateOptions {
   if (input.game === Game.FACTORIO) return buildFactorioSpec(input);
   if (input.game === Game.RUST) return buildRustSpec(input);
   if (input.game === Game.BEAMMP) return buildBeammpSpec(input);
+  if (input.game === Game.OPENTTD) return buildOpenttdSpec(input);
   return buildAseSpec(input);
 }
 
@@ -133,7 +182,9 @@ function serverLabels(input: RuntimeSpecInput, baseUrl: string): Record<string, 
     "ark.role": "server",
     "ark.serverId": input.serverId,
     "ark.game": input.game,
-    "net.unraid.docker.icon": GAME_ICONS[input.game],
+    // SteamGridDB square icon (per-server pick or game default) beats the wide
+    // Steam header.jpg that Unraid squishes into its square dashboard slot.
+    "net.unraid.docker.icon": input.iconUrl || GAME_ICONS[input.game],
     "net.unraid.docker.webui": `${baseUrl}/servers/${input.serverId}`,
   };
 }
@@ -509,16 +560,97 @@ function buildPalworldSpec(input: RuntimeSpecInput): Docker.ContainerCreateOptio
 }
 
 /** Palworld settings -> env vars. Booleans become PalWorldSettings.ini's True/False. */
-function palworldCatalogEnv(input: RuntimeSpecInput): string[] {
+function palworldCatalogEnv(input: RuntimeSpecInput, boolStyle: "True" | "true" = "True"): string[] {
   const out: string[] = [];
   for (const def of input.catalog.settings) {
     if (def.target !== SettingTarget.Env) continue;
     const raw = input.config.values?.[def.key] ?? def.default;
     if (raw === undefined || raw === null) continue;
-    const val = typeof raw === "boolean" ? (raw ? "True" : "False") : String(raw);
+    const t = boolStyle === "True" ? ["True", "False"] : ["true", "false"];
+    const val = typeof raw === "boolean" ? (raw ? t[0] : t[1]) : String(raw);
     out.push(`${def.emitAs ?? def.key}=${val}`);
   }
   return out;
+}
+
+/**
+ * Palworld under Wine (ripps818/docker-palworld-dedicated-server-wine): runs the
+ * WINDOWS PalServer.exe via Wine+Xvfb, which is what unlocks DLL mods (PalGuard,
+ * PalDefender) that the native Linux binary can't load. Its env contract differs
+ * from thijsvanloef's native image (PUBLIC_PORT vs PORT, MAX_PLAYERS vs PLAYERS,
+ * MULTITHREAD_ENABLED vs MULTITHREADING, WindowsServer config dir, lowercase
+ * bools), so it's a separate builder. The image renders PalWorldSettings.ini
+ * from env; UE4SS installs the Windows way into Pal/Binaries/Win64 (no launcher
+ * patch), so config-writer treats it as env-only. Uses gosu (not sudo) → the
+ * no-new-privileges hardening is safe here.
+ */
+function buildPalworldWineSpec(input: RuntimeSpecInput): Docker.ContainerCreateOptions {
+  const env = loadEnv();
+  const { ports } = input;
+  const name = containerName(input.serverId, input.game, input.sessionName);
+  const hostNet = env.GAME_HOST_NETWORK;
+
+  const palEnv = [
+    `TZ=${input.timezone || env.TZ}`,
+    `PUID=${env.PUID}`,
+    `PGID=${env.PGID}`,
+    // UE4SS ships as a dwmapi.dll proxy in Pal/Binaries/Win64; Wine only loads it if told
+    // to prefer the native (proxy) dwmapi over its builtin. "n,b" = native-then-builtin,
+    // so vanilla servers (no proxy on disk) still fall back to Wine's builtin. Without
+    // this the framework files sit inert and DLL mods never load.
+    `WINEDLLOVERRIDES=dwmapi=n,b`,
+    // Without this the image defaults to SERVER_SETTINGS_MODE=manual and IGNORES every
+    // env var above (ports, RCON, passwords, catalog) — the server then boots on its
+    // hard-coded defaults (game 8211, RCON off). "auto" makes it envsubst our values
+    // into PalWorldSettings.ini on each start.
+    `SERVER_SETTINGS_MODE=auto`,
+    `SERVER_NAME=${input.sessionName}`,
+    `SERVER_PASSWORD=${serverPassword(input)}`,
+    `ADMIN_PASSWORD=${input.adminPassword}`,
+    `RCON_ENABLED=true`,
+    `RCON_PORT=${ports.rcon}`,
+    `PUBLIC_PORT=${ports.game}`,
+    `MAX_PLAYERS=${input.maxPlayers}`,
+    `MULTITHREAD_ENABLED=true`,
+    // The manager owns updates/backups/restarts — silence the image's own loops.
+    `ALWAYS_UPDATE_ON_START=false`,
+    `BACKUP_ENABLED=false`,
+    `RESTART_ENABLED=false`,
+    ...palworldCatalogEnv(input, "true"),
+  ];
+
+  const binds = [`${HostPaths.instanceRoot(input.serverId)}:${PALWORLD_DATA_DIR}`];
+
+  return {
+    name,
+    Image: IMAGES[Game.PALWORLD_WINE],
+    Hostname: name,
+    Env: palEnv,
+    Labels: serverLabels(input, env.PUBLIC_BASE_URL),
+    ...(hostNet
+      ? {}
+      : {
+          ExposedPorts: {
+            [portKey(ports.game, "udp")]: {},
+            [portKey(ports.rcon, "tcp")]: {},
+          },
+        }),
+    HostConfig: {
+      Binds: binds,
+      ...(hostNet
+        ? { NetworkMode: "host" }
+        : {
+            PortBindings: {
+              [portKey(ports.game, "udp")]: [{ HostPort: String(ports.game) }],
+              [portKey(ports.rcon, "tcp")]: [{ HostPort: String(ports.rcon) }],
+            },
+          }),
+      RestartPolicy: { Name: "no" },
+      Memory: input.ramLimitMb ? input.ramLimitMb * 1024 * 1024 : undefined,
+      NanoCpus: input.cpuLimit ? Math.round(input.cpuLimit * 1e9) : undefined,
+    },
+    ...(hostNet ? {} : { NetworkingConfig: { EndpointsConfig: { [ARK_NETWORK]: {} } } }),
+  };
 }
 
 /**
@@ -898,7 +1030,9 @@ function buildSevenDaysSpec(input: RuntimeSpecInput): Docker.ContainerCreateOpti
     `PUID=${env.PUID}`,
     `PGID=${env.PGID}`,
     `START_MODE=1`, // install/update if needed, then start (LinuxGSM)
-    `VERSION=stable`,
+    // Pinnable branch (default "stable"; "latest_experimental" for the beta) — set
+    // via the settings dropdown. set_version.sh maps it to the LinuxGSM Steam branch.
+    `VERSION=${gameVersionValue(input.config.values?.["VERSION"], "stable")}`,
     `BACKUP=NO`, // manager owns backups
     `MONITOR=NO`, // manager owns the crash watchdog
   ];
@@ -966,7 +1100,8 @@ function buildEnshroudedSpec(input: RuntimeSpecInput): Docker.ContainerCreateOpt
     `SERVER_SLOT_COUNT=${slots}`,
     `SERVER_GAME_PORT=${ports.game}`, // 15636 (also the image default)
     `SERVER_QUERYPORT=${ports.query}`, // 15637
-    `GAME_BRANCH=public`,
+    // GAME_BRANCH (default "public"; "testing" for the experimental branch) is emitted
+    // by enshroudedCatalogEnv from its catalog setting — no hardcoded line here.
     ...enshroudedRoleEnv(input),
     ...enshroudedCatalogEnv(input),
   ];
@@ -1414,7 +1549,8 @@ function buildLifSpec(input: RuntimeSpecInput): Docker.ContainerCreateOptions {
 
   const lifEnv = [
     `TZ=${input.timezone || env.TZ}`,
-    `GAME_ID=${STEAM_APP_ID_LIF}`,
+    // Pinnable via the STEAM_BRANCH setting (default "public"): dx9-legacy / vanilla-1.3.6 / …
+    `GAME_ID=${ich777GameId(STEAM_APP_ID_LIF, input.config.values?.["STEAM_BRANCH"])}`,
     `GAME_PARAMS=-world 1`, // matches config/world_1.xml
     `UID=${env.PUID}`,
     `GID=${env.PGID}`,
@@ -1922,7 +2058,8 @@ function buildAtsSpec(input: RuntimeSpecInput): Docker.ContainerCreateOptions {
 
   const atsEnv = [
     `TZ=${input.timezone || env.TZ}`,
-    `GAME_ID=${input.game === Game.ATS ? 2239530 : 1948160}`,
+    // Pinnable via the STEAM_BRANCH setting (default "public") → a specific game version.
+    `GAME_ID=${ich777GameId(input.game === Game.ATS ? 2239530 : 1948160, input.config.values?.["STEAM_BRANCH"])}`,
     `GAME_PARAMS=`,
     `UID=${env.PUID}`,
     `GID=${env.PGID}`,
@@ -1953,6 +2090,58 @@ function buildAtsSpec(input: RuntimeSpecInput): Docker.ContainerCreateOptions {
         : {
             PortBindings: Object.fromEntries(
               udpPorts.map((p) => [portKey(p, "udp"), [{ HostPort: String(p) }]]),
+            ),
+          }),
+      RestartPolicy: { Name: "no" }, // manager watchdog owns restarts
+      Memory: input.ramLimitMb ? input.ramLimitMb * 1024 * 1024 : undefined,
+      NanoCpus: input.cpuLimit ? Math.round(input.cpuLimit * 1e9) : undefined,
+    },
+    ...(hostNet ? {} : { NetworkingConfig: { EndpointsConfig: { [ARK_NETWORK]: {} } } }),
+  };
+}
+
+/**
+ * OpenTTD (ich777). Env-light: the image downloads OpenTTD on first start and reads
+ * server config from the three cfg files the config-writer renders under
+ * serverfiles/.config/openttd. The whole instance dir binds to the image's DATA_DIR.
+ * The game port carries both TCP (clients) and UDP (server-browser query).
+ */
+function buildOpenttdSpec(input: RuntimeSpecInput): Docker.ContainerCreateOptions {
+  const env = loadEnv();
+  const { ports } = input;
+  const name = containerName(input.serverId, input.game, input.sessionName);
+
+  const openttdEnv = [
+    `TZ=${input.timezone || env.TZ}`,
+    `GAME_PORT=${ports.game}`,
+    `GAME_PARAMS=`,
+    // Pinnable game version (default "latest") — set via the settings dropdown.
+    `GAME_VERSION=${gameVersionValue(input.config.values?.["GAME_VERSION"], "latest")}`,
+    `GFX_PK_V=latest`,
+    // Skip the gotty web console — it hard-codes host:8080 under host networking, a
+    // common conflict. OpenTTD admins use the in-game console (rcon_password).
+    `ENABLE_WEBCONSOLE=false`,
+    `UID=${env.PUID}`,
+    `GID=${env.PGID}`,
+  ];
+
+  const binds = [`${HostPaths.instanceRoot(input.serverId)}:${OPENTTD_DATA_DIR}`];
+  const hostNet = env.GAME_HOST_NETWORK;
+  const portEntries = [portKey(ports.game, "tcp"), portKey(ports.game, "udp")];
+  return {
+    name,
+    Image: IMAGES[input.game],
+    Hostname: name,
+    Env: openttdEnv,
+    Labels: serverLabels(input, env.PUBLIC_BASE_URL),
+    ...(hostNet ? {} : { ExposedPorts: Object.fromEntries(portEntries.map((k) => [k, {}])) }),
+    HostConfig: {
+      Binds: binds,
+      ...(hostNet
+        ? { NetworkMode: "host" }
+        : {
+            PortBindings: Object.fromEntries(
+              portEntries.map((k) => [k, [{ HostPort: String(ports.game) }]]),
             ),
           }),
       RestartPolicy: { Name: "no" }, // manager watchdog owns restarts
@@ -2022,6 +2211,7 @@ export function patchAtsServerConfig(
 
   for (const def of input.catalog.settings) {
     if (def.target !== SettingTarget.Env) continue;
+    if (def.noEmit) continue; // e.g. STEAM_BRANCH → GAME_ID, not a server_config.sii key
     const raw = input.config.values?.[def.key] ?? def.default;
     if (raw === undefined || raw === null) continue;
     const rendered =
@@ -2064,6 +2254,7 @@ export function patchLifWorldXml(
 
   for (const def of input.catalog.settings) {
     if (def.target !== SettingTarget.Env) continue;
+    if (def.noEmit) continue; // e.g. STEAM_BRANCH → GAME_ID, not a world_1.xml tag
     const raw = input.config.values?.[def.key] ?? def.default;
     if (raw === undefined || raw === null || raw === "") continue;
     const value = typeof raw === "boolean" ? (raw ? 1 : 0) : raw;
@@ -2122,6 +2313,7 @@ export function renderSdtdServerXml(input: {
   };
   // Catalog gameplay properties (GameName, difficulty, rates, …).
   for (const def of input.catalog.settings) {
+    if (def.noEmit) continue; // e.g. VERSION is a launch/branch env, not an XML property
     const raw = input.config.values?.[def.key] ?? def.default;
     if (raw === undefined || raw === null) continue;
     props[def.emitAs ?? def.key] = typeof raw === "boolean" ? (raw ? "true" : "false") : (raw as string | number);
@@ -2130,4 +2322,68 @@ export function renderSdtdServerXml(input: {
     ([name, value]) => `  <property name="${name}" value="${esc(value)}"/>`,
   );
   return `<?xml version="1.0"?>\n<ServerSettings>\n${lines.join("\n")}\n</ServerSettings>\n`;
+}
+
+/**
+ * OpenTTD splits its config across three files under .config/openttd/: openttd.cfg
+ * (public settings), private.cfg (server name), secrets.cfg (passwords). We render all
+ * three fresh each start — the ich777 image hard-kills OpenTTD on `docker stop`, so it
+ * never persists its own config, making our render authoritative. Catalog settings carry
+ * emitAs="<section>.<key>" to route into the right [section] of openttd.cfg.
+ */
+export function renderOpenttdConfig(input: {
+  sessionName: string;
+  serverPassword: string;
+  adminPassword: string;
+  maxPlayers: number;
+  map: string; // landscape: temperate / arctic / tropic / toyland
+  gamePort: number;
+  adminPort: number;
+  catalog: SettingsCatalog;
+  config: ServerConfigValues;
+}): { "openttd.cfg": string; "private.cfg": string; "secrets.cfg": string } {
+  // openttd.cfg values are read to end-of-line, so a stray newline would corrupt the
+  // file — strip control chars from any free-text value.
+  const clean = (v: unknown) => String(v).replace(/[\r\n]/g, " ").trim();
+
+  const sections: Record<string, Record<string, string | number>> = {
+    network: {
+      server_port: input.gamePort,
+      server_admin_port: input.adminPort,
+      max_clients: input.maxPlayers,
+    },
+    game_creation: { landscape: input.map },
+    difficulty: {},
+  };
+  for (const def of input.catalog.settings) {
+    if (def.noEmit) continue; // e.g. GAME_VERSION is passed via env, not a cfg key
+    const raw = input.config.values?.[def.key] ?? def.default;
+    if (raw === undefined || raw === null) continue;
+    const [section, key] = (def.emitAs ?? `network.${def.key}`).split(".");
+    if (!section || !key) continue;
+    (sections[section] ??= {})[key] =
+      typeof raw === "boolean" ? (raw ? "true" : "false") : (raw as string | number);
+  }
+
+  const renderIni = (secs: Record<string, Record<string, string | number>>) =>
+    Object.entries(secs)
+      .filter(([, kv]) => Object.keys(kv).length > 0)
+      .map(
+        ([name, kv]) =>
+          `[${name}]\n` +
+          Object.entries(kv)
+            .map(([k, v]) => `${k} = ${v}`)
+            .join("\n"),
+      )
+      .join("\n\n") + "\n";
+
+  return {
+    "openttd.cfg": renderIni(sections),
+    "private.cfg": `[network]\nserver_name = ${clean(input.sessionName)}\n`,
+    "secrets.cfg":
+      `[network]\n` +
+      `server_password = ${clean(input.serverPassword)}\n` +
+      `rcon_password = ${clean(input.adminPassword)}\n` +
+      `admin_password = ${clean(input.adminPassword)}\n`,
+  };
 }

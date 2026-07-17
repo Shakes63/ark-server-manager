@@ -27,6 +27,15 @@ function vset(
 export const VALHEIM_MODIFIER_CATEGORY = "World modifiers";
 
 const settings: SettingDef[] = [
+  // ── Version ──────────────────────────────────────────────────────────────────
+  // lloesche PUBLIC_TEST env → the Valheim public-test Steam beta branch.
+  vset("PUBLIC_TEST", "Game version", "Version", "enum", "false", {
+    choices: [
+      { value: "false", label: "Stable (public)" },
+      { value: "true", label: "Public-Test (beta)" },
+    ],
+    help: "Run Valheim's Public Test beta branch instead of the stable release. Changing it re-downloads the game on the next start.",
+  }),
   // ── World ────────────────────────────────────────────────────────────────────
   vset("WORLD_NAME", "World name", "World", "string", "Dedicated", {
     help: "The world's save-file name. A new world is generated on first start; keep this stable to keep the same world.",

@@ -1305,7 +1305,12 @@ describe("renderSdtdServerXml", () => {
 // Every game container gets the central hardening injected by buildContainerSpec,
 // regardless of which per-game builder produced the spec.
 describe("container hardening (all games)", () => {
-  it("applies no-new-privileges and a pids limit to every game's spec", async () => {
+  // ASA + Conan (POK/Acekorneya images) sudo in their entrypoints, which
+  // no-new-privileges kills even as root — so they're exempt from that flag
+  // (but still get the PidsLimit). See NO_NEW_PRIVS_EXEMPT.
+  const SUDO_IMAGES = new Set<Game>([Game.ASA, Game.CONAN]);
+
+  it("applies the right hardening per game", async () => {
     const { buildContainerSpec } = await import("./runtime-spec");
     for (const game of Object.values(Game)) {
       const spec = buildContainerSpec({
@@ -1322,7 +1327,10 @@ describe("container hardening (all games)", () => {
         config: { values: {} },
         catalog: { settings: [] } as never,
       });
-      expect(spec.HostConfig?.SecurityOpt, game).toContain("no-new-privileges:true");
+      const nnp = spec.HostConfig?.SecurityOpt?.includes("no-new-privileges:true") ?? false;
+      // POK images must NOT get no-new-privileges (it breaks their sudo);
+      // every other game must.
+      expect(nnp, game).toBe(!SUDO_IMAGES.has(game));
       expect(spec.HostConfig?.PidsLimit, game).toBe(8192);
     }
   });

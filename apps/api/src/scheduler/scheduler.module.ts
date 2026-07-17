@@ -6,9 +6,10 @@ import { RconModule } from "../rcon/rcon.module";
 import { BackupsModule } from "../backups/backups.module";
 import { PlayersModule } from "../players/players.module";
 import { UpdatesModule } from "../updates/updates.module";
+import { ModUpdatesModule } from "../modupdates/modupdates.module";
 
 @Module({
-  imports: [ServersModule, RconModule, BackupsModule, PlayersModule, UpdatesModule],
+  imports: [ServersModule, RconModule, BackupsModule, PlayersModule, UpdatesModule, ModUpdatesModule],
   controllers: [SchedulesController],
   providers: [SchedulerService],
   exports: [SchedulerService],
